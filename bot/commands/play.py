@@ -14,9 +14,10 @@ TEST_GUILDID = os.getenv("TEST_GUILDID")
 
 
 class Player(commands.Cog):
+    subscriptions = ServerQueue()
+    
     def __init__(self, bot: Bot):
         self.bot = bot
-        self.subscriptions = ServerQueue()
 
     @commands.slash_command(guild_ids=[TEST_GUILDID], description="Play music")
     @option("url", description="url")
@@ -33,7 +34,7 @@ class Player(commands.Cog):
         
         if ctx.voice_client is None:
             await ctx.author.voice.channel.connect()
-        tracks = await Track.from_url(url, ctx.author, loop=self.bot.loop)
+        tracks = await Track.from_url(url, ctx.author)
         subscription = self.subscriptions.getQueue(ctx.guild_id)
         
         if shuffle:
