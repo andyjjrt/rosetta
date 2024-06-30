@@ -1,6 +1,6 @@
 import discord
 from uvicorn import Config, Server
-import requests, os, sys, asyncio
+import os
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -17,15 +17,13 @@ TOKEN = os.getenv("TOKEN")
 @bot.event
 async def on_ready():
     print(f"We have logged in as {bot.user}")
-    await bot.register_commands()
-    game = discord.Game("Testing")
+    game = discord.Activity(type=discord.ActivityType.competing, name="Testing")
     await bot.change_presence(status=discord.Status.do_not_disturb, activity=game)
 
-    loop = asyncio.new_event_loop()
-    config = Config(app=app, loop=loop)
+    config = Config(app=app)
     server = Server(config)
-
-    loop.run_until_complete(await server.serve())
+    
+    await server.serve()
 
 
 bot.add_cog(Basics(bot))
