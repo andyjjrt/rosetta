@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 app = FastAPI()
 
-from data.subscriptions import ServerQueue
+from data.subscriptions import Subscription
 
 class OauthBody(BaseModel):
     code: str
@@ -32,5 +32,5 @@ def token(oauthBody: OauthBody):
 
 @app.get("/api/test")
 def test():
-    print(ServerQueue._serverStatus)
+    print(Subscription._serverStatus)
     return {}

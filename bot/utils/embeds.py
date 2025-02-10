@@ -1,5 +1,7 @@
+from typing import List
 from discord import Embed, EmbedFooter, Colour, Bot
 from datetime import datetime
+from data.track import Track
 
 
 def PingEmbed(bot: Bot, latency: float):
@@ -33,6 +35,15 @@ def LeaveEmbed(bot: Bot):
     return Embed(
         title=":wave:  Leaving",
         description="Bye~",
+        colour=Colour.teal(),
+        footer=EmbedFooter(text=bot.user.name, icon_url=bot.user.avatar),
+        timestamp=datetime.now(),
+    )
+
+def SearchEmbed(bot: Bot, keyword: str, tracks: List[Track]):
+    return Embed(
+        title=f":mag: Search result of **\"{keyword}\"**",
+        description="\n".join([f"{i + 1}. [**{track.title}**]({track.url})" for i, track in enumerate(tracks)]),
         colour=Colour.teal(),
         footer=EmbedFooter(text=bot.user.name, icon_url=bot.user.avatar),
         timestamp=datetime.now(),
