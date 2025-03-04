@@ -69,15 +69,21 @@ class Player(commands.Cog):
         options = {
             "extractor_retries": 1,
             "quiet": True,
+            "noplaylist": True,
             "ignoreerrors": True,
             "extract_flat": True,
         }
         with yt_dlp.YoutubeDL(options) as ytdl:
             loop = asyncio.get_running_loop()
             data = await loop.run_in_executor(
-                None, lambda: ytdl.extract_info(f"ytsearch25:{keyword}", download=False)
+                None,
+                lambda: ytdl.extract_info(f"ytsearch25:{keyword}", download=False),
             )
-            data = data["entries"]
+            data = [
+                entry
+                for entry in data.get("entries", [])
+                if entry.get("ie_key") == "Youtube"
+            ]
             tracks = [Track(d, ctx.author) for d in data]
             return tracks
 
@@ -118,7 +124,6 @@ class Player(commands.Cog):
     @commands.slash_command(description="Search in Youtube")
     @option("keyword", description="keyword")
     async def search(self, ctx: ApplicationContext, keyword: str):
-
         await ctx.defer()
         tracks = await self._search(ctx, keyword)
         await ctx.respond(
