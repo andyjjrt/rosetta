@@ -3,6 +3,8 @@ import asyncio, os
 import yt_dlp
 import ffmpeg
 
+MUSIC_DIR = os.getenv("MUSIC_DIR")
+
 ytdl_format_options = {
     "format": "ba[ext=m4a]",
     "outtmpl": "music/%(id)s.%(ext)s",
@@ -53,7 +55,7 @@ class Track:
 
     async def createAudio(self):
         with yt_dlp.YoutubeDL(ytdl_format_options) as ytdl:
-            filename = f"music/{self.ytId}.m4a"
+            filename = os.path.join(MUSIC_DIR, f"{self.ytId}.m4a")
             if not os.path.exists(filename):
                 errorCode = await asyncio.get_event_loop().run_in_executor(
                     None, lambda: ytdl.download([self.url])
