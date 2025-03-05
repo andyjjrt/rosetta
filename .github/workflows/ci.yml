@@ -34,7 +34,7 @@ jobs:
         uses: docker/build-push-action@v4
         with:
           context: .
-          push: false
+          push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
       
@@ -56,12 +56,14 @@ jobs:
           name: v${{ steps.meta.outputs.version }}
           tag: ${{ steps.meta.outputs.version }}
           body: |
-            ${{ steps.changelog.outputs.compareurl }}
-      
-            ${{ steps.changelog.outputs.changelog }}
+            # v${{ steps.meta.outputs.version }}
 
             ```sh
             docker pull ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}
             ```
 
-      
+            ## Changelog
+
+            ${{ steps.changelog.outputs.changelog }}
+
+            See also: ${{ steps.changelog.outputs.compareurl }}
