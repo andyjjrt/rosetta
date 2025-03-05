@@ -241,6 +241,7 @@ class SearchSelectView(discord.ui.View):
         super().__init__(timeout=timeout)
         self.add_item(SearchSelect(player, tracks, ctx))
         self.add_item(SearchButton(player, tracks, ctx, label="Search", emoji="🔎"))
+        self.add_item(ToggleButton(emoji="🔝", custom_id="Top"))
 
 
 class SearchModal(discord.ui.Modal):
@@ -290,12 +291,13 @@ class SearchSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         _ctx = ApplicationContext(self.player.bot, interaction)
+        top = True if self.view.get_item("Top").style == discord.ButtonStyle.success else False
         self.view.clear_items()
         await interaction.message.edit(view=self.view)
         message = await interaction.respond(embed=ProcessingEmbed(self.player.bot.user))
 
         await self.player.ensure_voice(_ctx)
-        embed = await self.player._play(_ctx, self.values[0], "Off", False, False)
+        embed = await self.player._play(_ctx, self.values[0], "Off", False, top)
         await message.edit(embed=embed)
 
 
@@ -318,4 +320,30 @@ class SearchButton(discord.ui.Button):
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_modal(
             SearchModal(self.player, self.tracks, self.ctx)
+        )
+
+
+class ToggleButton(discord.ui.Button):
+    def __init__(
+        self,
+        *,
+        style=discord.ButtonStyle.secondary,
+        label=None,
+        emoji=None,
+        custom_id=None
+    ):
+        super().__init__(style=style, label=label, emoji=emoji, custom_id=custom_id)
+
+    async def callback(self, interaction: discord.Interaction):
+        if self.style == discord.ButtonStyle.success:
+            self.style = discord.ButtonStyle.secondary
+            res = "False"
+        elif self.style == discord.ButtonStyle.secondary:
+            self.style = discord.ButtonStyle.success
+            res = "True"
+        
+        await interaction.message.edit(view=self.view)
+        await interaction.response.send_message(
+            embed=SuccessEmbed(interaction.user, f'{self.custom_id} switched to {res}'),
+            ephemeral=True,
         )
