@@ -1,0 +1,74 @@
+name: ci
+
+on:
+  push:
+    branches:
+      - 'main'
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v3
+      -
+        name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+      -
+        name: Login to ghcr.io
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      -
+        name: Build and push
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: false
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+      
+      - name: Get previous tag
+        id: previous_tag
+        run: |
+          # echo "previous_tag=$(git describe --tags --abbrev=0 2>/dev/null || echo '')" >> $GITHUB_ENV
+          echo "previous_tag=v0.0.2" >> $GITHUB_OUTPUT
+      
+      - name: Generate changelog
+        id: changelog
+        uses: jaywcjlove/changelog-generator@v2.2.2
+        if: steps.previous_tag.outputs.previous_tag != ''
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          filter-author: (andyjjrt|dependabot|renovate\\[bot\\]|dependabot\\[bot\\]|Renovate Bot)
+          filter: '[R|r]elease[d]\s+[v|V]\d(\.\d+){0,2}'
+      
+
+      - name: Get the changelog
+        run: echo "${{ steps.changelog.outputs.changelog }}"
+      
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        if: steps.previous_tag.outputs.previous_tag != ''
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          name: ${{ steps.previous_tag.outputs.previous_tag }}
+          tag: ${{ steps.previous_tag.outputs.previous_tag }}
+          body: |
+            ${{ steps.changelog.outputs.compareurl }}
+      
+            ${{ steps.changelog.outputs.changelog }}
+            
+            Document Website: https://raw.githack.com/jaywcjlove/changelog-generator/${{ steps.changelog.outputs.gh-pages-short-hash }}/index.html
+      
