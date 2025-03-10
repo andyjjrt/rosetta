@@ -90,8 +90,9 @@ class Mygo(commands.Cog):
     @option(
         "resolution", type=int, choices=[240, 360, 720], default=240, required=False
     )
-    async def mygo(self, ctx: ApplicationContext, text: str, resolution: int):
-        await ctx.defer()
+    @option("ephemeral", type=bool, default=False, required=False)
+    async def mygo(self, ctx: ApplicationContext, text: str, resolution: int, ephemeral: bool):
+        await ctx.defer(ephemeral=ephemeral)
         match = re.match(r"\[([^\]]+)\] (.+)", text)
         if match:
             segment_id = match.group(1)
@@ -104,4 +105,4 @@ class Mygo(commands.Cog):
 
         # Send the GIF
         file = discord.File(gif_buffer, filename=f"{result['text']}.gif")
-        await ctx.respond(file=file)
+        await ctx.respond(file=file, ephemeral=ephemeral)
