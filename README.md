@@ -13,8 +13,6 @@ CLIENT_ID=xxx
 3. Use `docker compose up -d` to start your service
 
 ```yml
-version: "3"
-
 services:
   rosetta:
     image: ghcr.io/andyjjrt/rosetta:latest
