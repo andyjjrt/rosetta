@@ -2,7 +2,7 @@ import discord
 from discord import VoiceClient, Bot
 from discord.channel import TextChannel
 from queue import SimpleQueue, Empty
-from data.track import Track
+from utils.track import Track
 from utils.embeds import LeaveEmbed
 import asyncio, copy
 

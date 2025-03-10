@@ -6,8 +6,8 @@ from discord import (
     ApplicationContext,
 )
 from discord.ext import commands, tasks
-from data.track import Track
-from data.subscriptions import Subscription, Queue
+from utils.track import Track
+from utils.subscriptions import Subscription, Queue
 from utils.embeds import (
     SuccessEmbed,
     SearchEmbed,

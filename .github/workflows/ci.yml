@@ -39,6 +39,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: ROSETTA_VERSION=${{ steps.meta.outputs.version }}
       
       - name: Generate changelog
         id: changelog

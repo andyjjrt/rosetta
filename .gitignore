@@ -1,6 +1,7 @@
 __pycache__/
 .env
 music/
+bot/config.ini
 
 # Logs
 logs

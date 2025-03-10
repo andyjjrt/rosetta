@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 app = FastAPI()
 
-from data.subscriptions import Subscription
+from utils.subscriptions import Subscription
 
 class OauthBody(BaseModel):
     code: str

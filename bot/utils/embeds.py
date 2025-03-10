@@ -1,7 +1,7 @@
 from typing import List
 from discord import Embed, EmbedFooter, Colour, User
 from datetime import datetime
-from data.track import Track
+from utils.track import Track
 
 
 def PingEmbed(user: User, latency: float):
