@@ -57,7 +57,7 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           name: v${{ steps.meta.outputs.version }}
-          tag: ${{ steps.meta.outputs.version }}
+          tag: v${{ steps.meta.outputs.version }}
           body: |
             # v${{ steps.meta.outputs.version }}
 
