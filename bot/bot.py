@@ -32,13 +32,17 @@ async def on_ready():
 async def on_application_command_error(
     ctx: discord.ApplicationContext, error: discord.DiscordException
 ):
-    print(error)
+    logging.error(error)
     if isinstance(error, commands.CommandError):
         await ctx.respond(embed=ErrorEmbed(bot.user, f"[Command] {error}"))
     else:
         await ctx.respond(embed=ErrorEmbed(bot.user, f"[Unknown] {error}"))
         raise error
 
+@bot.event
+async def on_application_command(ctx: discord.ApplicationContext):
+    # logger.info(f"{ctx.author} uses {ctx.interaction.data} {ctx.channel} {ctx.guild}")
+    logger.info(f"[{ctx.channel}] {ctx.author} uses /{ctx.command}")
 
 bot.add_cog(Basics(bot))
 bot.add_cog(Player(bot))
