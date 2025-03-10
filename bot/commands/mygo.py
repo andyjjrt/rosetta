@@ -24,40 +24,45 @@ class Mygo(commands.Cog):
             for d in Mygo.data
             if text in d["text"]
         ][:25]
-        
-    async def generate_gif(self, segment_data):
+
+    async def generate_gif(self, segment_data, resolution):
         def fps(s) -> float:
             fls = s.split("/")
             return float(fls[0]) / float(fls[1])
-    
+
         filename = os.path.join(self.FOLDER, f"{segment_data['episode']}.mp4")
 
         probe_m = ffmpeg.probe(filename=filename)
-        seek: float = float(min(segment_data["frame_start"], segment_data["frame_end"])) / fps(probe_m['streams'][0]['r_frame_rate'])
+        seek: float = float(
+            min(segment_data["frame_start"], segment_data["frame_end"])
+        ) / fps(probe_m["streams"][0]["r_frame_rate"])
         delta = segment_data["frame_end"] - segment_data["frame_start"]
 
-        palettegen = ffmpeg.input(filename=filename, ss=seek) \
-                .trim(start_frame=0, end_frame=delta + 1) \
-                .filter(filter_name='scale', width=-1, height=240) \
-                .filter(filter_name='palettegen', stats_mode='diff')
-        scale = ffmpeg.input(filename=filename, ss=seek) \
-            .filter(filter_name='scale', width=-1, height=240)
-        # stream order needs to be scale -> palettegen
-        cmd = ffmpeg.filter([scale, palettegen], filter_name='paletteuse', dither='floyd_steinberg',
-                                    diff_mode='rectangle') \
-            .output('pipe:',
-                    vframes=delta + 1,
-                    format='gif',
-                    vcodec='gif'
-                    ) \
-            .compile()
-            
-        process = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+        palettegen = (
+            ffmpeg.input(filename=filename, ss=seek)
+            .trim(start_frame=0, end_frame=delta + 1)
+            .filter(filter_name="scale", width=-1, height=resolution)
+            .filter(filter_name="palettegen", stats_mode="diff")
         )
-        
+        scale = ffmpeg.input(filename=filename, ss=seek).filter(
+            filter_name="scale", width=-1, height=resolution
+        )
+        # stream order needs to be scale -> palettegen
+        cmd = (
+            ffmpeg.filter(
+                [scale, palettegen],
+                filter_name="paletteuse",
+                dither="floyd_steinberg",
+                diff_mode="rectangle",
+            )
+            .output("pipe:", vframes=delta + 1, format="gif", vcodec="gif")
+            .compile()
+        )
+
+        process = await asyncio.create_subprocess_exec(
+            *cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+
         stdout, stderr = await process.communicate()
 
         gif_buffer = io.BytesIO()
@@ -65,28 +70,38 @@ class Mygo(commands.Cog):
         # Store the output in a BytesIO buffer
         gif_buffer.write(stdout)
         gif_buffer.seek(0)
-        
+
         return gif_buffer
 
-    @commands.slash_command(name="mygo")
+    @commands.slash_command(
+        name="mygo",
+        integration_types=set(
+            [
+                discord.IntegrationType.user_install,
+                discord.IntegrationType.guild_install,
+            ]
+        ),
+    )
     @option(
         "text",
         type=discord.SlashCommandOptionType.string,
         autocomplete=get_text,
     )
-    async def mygo(self, ctx: ApplicationContext, text: str):
+    @option(
+        "resolution", type=int, choices=[240, 360, 720], default=240, required=False
+    )
+    async def mygo(self, ctx: ApplicationContext, text: str, resolution: int):
         await ctx.defer()
-        # Extract segment_id from the text format "[segment_id] text"
-        match = re.match(r'\[([^\]]+)\] (.+)', text)
+        match = re.match(r"\[([^\]]+)\] (.+)", text)
         if match:
-            segment_id = match.group(1)  # Extract the segment_id
+            segment_id = match.group(1)
         else:
             raise commands.CommandError("Wrong format")
         result = [d for d in self.data if str(d["segment_id"]) == segment_id]
         assert len(result) == 1
         result = result[0]
-        gif_buffer = await self.generate_gif(result)
+        gif_buffer = await self.generate_gif(result, resolution)
 
         # Send the GIF
-        file = discord.File(gif_buffer, filename="animation.gif")
+        file = discord.File(gif_buffer, filename=f"{result['text']}.gif")
         await ctx.respond(file=file)
