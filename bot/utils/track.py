@@ -93,8 +93,8 @@ class Track:
 
     @property
     def time(self):
-        currentMinute = int(self.audio.time / 60000)
-        currentSecond = int(self.audio.time / 1000) % 60
+        currentMinute = int(self.audio.time / 60000) if self.audio else 0
+        currentSecond = int(self.audio.time / 1000) % 60 if self.audio else 0
         durationMinute = int(self.duration / 60)
         durationSecond = int(self.duration % 60)
         times = (currentMinute, currentSecond, durationMinute, durationSecond)

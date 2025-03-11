@@ -66,11 +66,13 @@ class Queue:
             self.voiceClient.play(
                 player, after=lambda e: print(f"Player error: {e}") if e else None
             )
+            self.checkLock = False
 
     async def _startSession(self):
         while True:
             if not self.voiceClient.is_playing() and not self.checkLock:
                 try:
+                    self.checkLock = True
                     await self._process()
                 except Empty:
                     await self.leave()

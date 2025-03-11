@@ -133,13 +133,15 @@ class Player(commands.Cog):
         )
 
     @commands.slash_command(description="Shuffle")
-    async def shuffle(self, ctx: ApplicationContext):
+    async def shuffle(self, ctx: ApplicationContext, ephemeral: bool = False):
         subscription = self.subscriptions.get(ctx.guild_id)
         random.shuffle(subscription.queue)
-        await ctx.respond(embed=SuccessEmbed(self.bot.user, f"Shuffle complete"))
+        await ctx.respond(
+            embed=SuccessEmbed(self.bot.user, f"Shuffle complete"), ephemeral=ephemeral
+        )
 
     @commands.slash_command(description="Skip to next song")
-    async def skip(self, ctx: ApplicationContext):
+    async def skip(self, ctx: ApplicationContext, ephemeral: bool = False):
         await ctx.defer()
         subscription = self.subscriptions.get(ctx.guild_id)
         try:
@@ -148,7 +150,7 @@ class Player(commands.Cog):
                 self.bot.user, f"Skipped to [**{track.title}**]({track.url})"
             )
             embed.set_thumbnail(url=track.thumbnail)
-            await ctx.followup.send(embed=embed)
+            await ctx.followup.send(embed=embed, ephemeral=ephemeral)
         except Empty:
             await ctx.followup.send(embed=SuccessEmbed(self.bot.user, f"No song left"))
 
@@ -159,13 +161,43 @@ class Player(commands.Cog):
         await ctx.respond(embed=LeaveEmbed(self.bot.user))
 
     @commands.slash_command(description="Show the song playing now")
-    async def nowplaying(self, ctx: ApplicationContext):
+    @option("realtime", type=bool, required=False)
+    async def nowplaying(self, ctx: ApplicationContext, realtime: bool):
         await ctx.defer()
         subscription = self.subscriptions.get(ctx.guild_id)
-        if not subscription.nowPlaying:
+        if not subscription:
             await ctx.respond(embed=ErrorEmbed(self.bot.user, "Not playing now."))
             return
-        await ctx.respond(embed=NowPlayingEmbed(track=subscription.nowPlaying))
+        if subscription and not subscription.checkLock:
+
+            if realtime:
+                message = await ctx.respond(
+                    embed=NowPlayingEmbed(
+                        track=subscription.nowPlaying, queue=subscription.queue
+                    ),
+                    view=NowPlayingView(self),
+                )
+                self.updateNowPlaying.start(ctx.guild_id, message.id)
+            else:
+                await ctx.respond(
+                    embed=NowPlayingEmbed(
+                        track=subscription.nowPlaying, queue=subscription.queue
+                    ),
+                )
+
+    @tasks.loop(seconds=1)
+    async def updateNowPlaying(self, guild_id, message_id):
+        subscription = self.subscriptions.get(guild_id)
+        if not subscription:
+            self.updateNowPlaying.cancel()
+        if subscription and not subscription.checkLock:
+            message = self.bot.get_message(message_id)
+            if message:
+                await message.edit(
+                    embed=NowPlayingEmbed(
+                        track=subscription.nowPlaying, queue=subscription.queue
+                    )
+                )
 
     @play.before_invoke
     async def ensure_voice(self, ctx: ApplicationContext):
@@ -347,3 +379,37 @@ class ToggleButton(discord.ui.Button):
             embed=SuccessEmbed(interaction.user, f"{self.custom_id} switched to {res}"),
             ephemeral=True,
         )
+
+
+class NowPlayingView(discord.ui.View):
+    def __init__(self, player: Player):
+        self.player = player
+        super().__init__(timeout=None)
+
+    @discord.ui.button(
+        label="Skip", custom_id="skip", style=discord.ButtonStyle.primary, emoji="⏩"
+    )
+    async def skip(self, button: discord.Button, interaction: discord.Interaction):
+        ctx = ApplicationContext(self.player.bot, interaction)
+        await self.player.skip(ctx, True)
+
+    @discord.ui.button(
+        label="Shuffle",
+        custom_id="shuffle",
+        style=discord.ButtonStyle.primary,
+        emoji="🔀",
+    )
+    async def shuffle(self, button: discord.Button, interaction: discord.Interaction):
+        ctx = ApplicationContext(self.player.bot, interaction)
+        await self.player.shuffle(ctx, True)
+
+    @discord.ui.button(
+        label="Stop Sync",
+        custom_id="stop-sync",
+        style=discord.ButtonStyle.primary,
+        emoji="♾️",
+    )
+    async def stopSync(self, button: discord.Button, interaction: discord.Interaction):
+        self.player.updateNowPlaying.cancel()
+        self.disable_all_items()
+        await interaction.message.edit(view=self)
