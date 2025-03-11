@@ -15,9 +15,18 @@ def PingEmbed(user: User, latency: float):
     
 def SuccessEmbed(user: User, message: str):
     return Embed(
-        title=":white_check_mark:  Success",
+        title="<a:success:1348927669856768084> Success",
         description=message,
         colour=Colour.green(),
+        footer=EmbedFooter(text=user.name, icon_url=user.avatar),
+        timestamp=datetime.now(),
+    )
+
+def ErrorEmbed(user: User, error: str):
+    return Embed(
+        title="<a:error:1348927643017547817> Error",
+        description=error,
+        colour=Colour.red(),
         footer=EmbedFooter(text=user.name, icon_url=user.avatar),
         timestamp=datetime.now(),
     )
@@ -31,12 +40,13 @@ def InfoEmbed(user: User, message: str):
         timestamp=datetime.now(),
     )
 
-def ErrorEmbed(user: User, error: str):
+def NowPlayingEmbed(track: Track):
     return Embed(
-        title=":x:  Error",
-        description=error,
-        colour=Colour.red(),
-        footer=EmbedFooter(text=user.name, icon_url=user.avatar),
+        title="<:youtube:1348932860983115876> Now Playing",
+        description=f"[**{track.title}**]({track.url})\n\n{track.time[0]}{track.progress}{track.time[1]}",
+        thumbnail=track.thumbnail,
+        colour=Colour.green(),
+        footer=EmbedFooter(text=track.author.name, icon_url=track.author.avatar),
         timestamp=datetime.now(),
     )
 
@@ -63,6 +73,5 @@ def ProcessingEmbed(user: User, message: str = "Processing..."):
         title=":globe_with_meridians:   Processing",
         description=message,
         colour=Colour.blurple(),
-        footer=EmbedFooter(text=user.name, icon_url=user.avatar),
         timestamp=datetime.now(),
     )

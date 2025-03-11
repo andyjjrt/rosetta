@@ -7,11 +7,12 @@ from discord import (
 )
 from discord.ext import commands, tasks
 from utils.track import Track
-from utils.subscriptions import Subscription, Queue
+from utils.subscriptions import Subscription
 from utils.embeds import (
     SuccessEmbed,
     SearchEmbed,
     LeaveEmbed,
+    NowPlayingEmbed,
     InfoEmbed,
     ErrorEmbed,
     ProcessingEmbed,
@@ -164,12 +165,7 @@ class Player(commands.Cog):
         if not subscription.nowPlaying:
             await ctx.respond(embed=ErrorEmbed(self.bot.user, "Not playing now."))
             return
-        embed = SuccessEmbed(
-            self.bot.user,
-            f"[**{subscription.nowPlaying.title}**]({subscription.nowPlaying.url})\n{subscription.nowPlaying.time}",
-        )
-        embed.set_thumbnail(url=subscription.nowPlaying.thumbnail)
-        await ctx.respond(embed=embed)
+        await ctx.respond(embed=NowPlayingEmbed(track=subscription.nowPlaying))
 
     @play.before_invoke
     async def ensure_voice(self, ctx: ApplicationContext):
@@ -291,7 +287,11 @@ class SearchSelect(discord.ui.Select):
 
     async def callback(self, interaction: discord.Interaction):
         _ctx = ApplicationContext(self.player.bot, interaction)
-        top = True if self.view.get_item("Top").style == discord.ButtonStyle.success else False
+        top = (
+            True
+            if self.view.get_item("Top").style == discord.ButtonStyle.success
+            else False
+        )
         self.view.clear_items()
         await interaction.message.edit(view=self.view)
         message = await interaction.respond(embed=ProcessingEmbed(self.player.bot.user))
@@ -330,7 +330,7 @@ class ToggleButton(discord.ui.Button):
         style=discord.ButtonStyle.secondary,
         label=None,
         emoji=None,
-        custom_id=None
+        custom_id=None,
     ):
         super().__init__(style=style, label=label, emoji=emoji, custom_id=custom_id)
 
@@ -341,9 +341,9 @@ class ToggleButton(discord.ui.Button):
         elif self.style == discord.ButtonStyle.secondary:
             self.style = discord.ButtonStyle.success
             res = "True"
-        
+
         await interaction.message.edit(view=self.view)
         await interaction.response.send_message(
-            embed=SuccessEmbed(interaction.user, f'{self.custom_id} switched to {res}'),
+            embed=SuccessEmbed(interaction.user, f"{self.custom_id} switched to {res}"),
             ephemeral=True,
         )
