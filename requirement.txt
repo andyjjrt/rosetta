@@ -74,5 +74,5 @@ websockets==14.2
 wheel==0.43.0
 wrapt==1.17.2
 yarl==1.9.4
-yt-dlp==2025.2.19
+yt-dlp==2025.3.25
 ytmusicapi==1.10.1
