@@ -54,7 +54,7 @@ class Track:
         self.url = (
             data.get("original_url") if data.get("original_url") else data.get("url")
         )
-        self.duration = data.get("duration")
+        self.duration = data.get("duration") or 0
         self.channel = data.get("channel")
         self.channel_url = data.get("channel_url")
         self.ytId = data.get("id")
@@ -107,12 +107,10 @@ class Track:
 
     @property
     def progress(self):
-        time = self.time
-
+        if not self.audio:
+            return ""
         progress = math.floor(self.audio.time / (self.duration * 100))
-        
         # [========]
-
         if progress == 0:
             return (
                 config['bot.emoji']['progress_start_0']

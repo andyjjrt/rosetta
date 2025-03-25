@@ -76,8 +76,9 @@ class Queue:
                     await self._process()
                 except Empty:
                     await self.leave()
-                except Exception:
-                    pass
+                except BaseException as e:
+                    print(e)
+                    await self.skip()
             await asyncio.sleep(1)
             
 class Subscription:

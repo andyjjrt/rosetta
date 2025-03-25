@@ -23,6 +23,8 @@ my_array=(
   "https://youtu.be/uh9jUhVTS28::ave-8"
   "https://youtu.be/pGrI6hk0vBg::ave-9"
   "https://youtu.be/m9cjOcCKIyQ::ave-10"
+  "https://youtu.be/Cfm8TWGkvYQ::ave-11"
+  "https://youtu.be/UtSEFdDZZLw::ave-12"
 )
 
 # Update the loop sections:
