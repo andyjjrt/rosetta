@@ -5,12 +5,13 @@ from utils.track import Track
 import configparser
 
 config = configparser.ConfigParser()
-config.read("../config.ini")
+config.read("config.ini")
+
 
 def PingEmbed(user: User, latency: float):
     return Embed(
         title=":ping_pong:  Pong",
-        description=f"Ball flew back in {int(latency*1000)}ms",
+        description=f"Ball flew back in {int(latency * 1000)}ms",
         colour=Colour.teal(),
         footer=EmbedFooter(text=user.name, icon_url=user.avatar),
         timestamp=datetime.now(),
@@ -53,7 +54,7 @@ def NowPlayingEmbed(track: Track, queue: List[Track]):
         queueMessage = [
             EmbedField(
                 name=f"💭 Next ({len(queue)} left)",
-                value=f"{'\n'.join([f'- [{t.title}]({t.url}) `{t.time[1]}`' for t in queue[:3]])}"
+                value=f"{'\n'.join([f'- [{t.title}]({t.url}) `{t.time[1]}`' for t in queue[:3]])}",
             )
         ]
     return Embed(

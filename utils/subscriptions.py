@@ -1,10 +1,9 @@
-import discord
 from discord import VoiceClient, Bot
 from discord.channel import TextChannel
-from queue import SimpleQueue, Empty
+from queue import Empty
 from utils.track import Track
 from utils.embeds import LeaveEmbed
-import asyncio, copy
+import asyncio
 
 
 class Queue:
@@ -37,7 +36,7 @@ class Queue:
             self.queue = tracks + self.queue
         else:
             self.queue += tracks
-        
+
     async def skip(self):
         self.voiceClient.stop()
         self.checkLock = True
@@ -80,9 +79,9 @@ class Queue:
                     print(e)
                     await self.skip()
             await asyncio.sleep(1)
-            
-class Subscription:
 
+
+class Subscription:
     _serverStatus = dict()
 
     def __init__(self) -> None:
@@ -111,7 +110,7 @@ class Subscription:
         print(self._serverStatus)
 
     def remove(self, guildId: str):
-        if not guildId in self._serverStatus:
+        if guildId not in self._serverStatus:
             raise Exception("guild don't have any queue")
         del self._serverStatus[guildId]
 

@@ -1,14 +1,17 @@
 import discord
-from discord import Bot, option, ApplicationContext, OptionChoice
+from discord import Bot, option, ApplicationContext
 from discord.ext import commands
-from utils.embeds import PingEmbed
-import os, json, ffmpeg, io, asyncio
+import os
+import json
+import ffmpeg
+import io
+import asyncio
 import subprocess
 import re
 
 
 class Mygo(commands.Cog):
-    FOLDER = "../mygo-ave-video"
+    FOLDER = "mygo-ave-video"
     data = []
 
     def __init__(self, bot: Bot):
@@ -91,7 +94,9 @@ class Mygo(commands.Cog):
         "resolution", type=int, choices=[240, 360, 720], default=240, required=False
     )
     @option("ephemeral", type=bool, default=False, required=False)
-    async def mygo(self, ctx: ApplicationContext, text: str, resolution: int, ephemeral: bool):
+    async def mygo(
+        self, ctx: ApplicationContext, text: str, resolution: int, ephemeral: bool
+    ):
         await ctx.defer(ephemeral=ephemeral)
         match = re.match(r"\[([^\]]+)\] (.+)", text)
         if match:

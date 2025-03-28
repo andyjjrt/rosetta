@@ -1,25 +1,29 @@
 import discord
 from discord.ext import commands
-import logging, asyncio, configparser
+import logging
+import asyncio
+import configparser
 
 from utils.embeds import ErrorEmbed
 from commands.basics import Basics
 from commands.play import Player
 from commands.mygo import Mygo
 
-from api.main import app
+from api.main import app  # noqa: F401
+
 
 intents = discord.Intents.default()
 intents.guilds = True
 intents.voice_states = True
 
 config = configparser.ConfigParser()
-config.read("../config.ini")
+config.read("config.ini")
 
 bot = discord.Bot(intents=intents)
 TOKEN = config["bot"].get("TOKEN")
 
-logger = logging.getLogger('uvicorn.error')
+logger = logging.getLogger("uvicorn.error")
+
 
 @bot.event
 async def on_ready():
@@ -39,10 +43,12 @@ async def on_application_command_error(
         await ctx.respond(embed=ErrorEmbed(bot.user, f"[Unknown] {error}"))
         raise error
 
+
 @bot.event
 async def on_application_command(ctx: discord.ApplicationContext):
     # logger.info(f"{ctx.author} uses {ctx.interaction.data} {ctx.channel} {ctx.guild}")
     logger.info(f"[{ctx.channel}] {ctx.author} uses /{ctx.command}")
+
 
 bot.add_cog(Basics(bot))
 bot.add_cog(Player(bot))

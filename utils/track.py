@@ -1,11 +1,13 @@
 from discord import FFmpegOpusAudio, Member, User
-import asyncio, os, math
+import asyncio
+import os
+import math
 import yt_dlp
 import ffmpeg
 import configparser
 
 config = configparser.ConfigParser()
-config.read("../config.ini")
+config.read("config.ini")
 
 ytdl_format_options = {
     "format": "ba[ext=m4a]",
@@ -76,7 +78,7 @@ class Track:
             if "mean_volume" in line:
                 mean_volume = float(line.split(":")[-1].strip().split()[0][:-2])
                 break
-        if mean_volume == None:
+        if mean_volume is None:
             raise Exception("Can't normalize sound")
         return mean_volume
 
@@ -103,7 +105,10 @@ class Track:
         durationSecond = int(self.duration % 60)
         times = (currentMinute, currentSecond, durationMinute, durationSecond)
         timesWithZeros = [f"0{t}" if t < 10 else t for t in times]
-        return (f"{timesWithZeros[0]}:{timesWithZeros[1]}", f"{timesWithZeros[2]}:{timesWithZeros[3]}")
+        return (
+            f"{timesWithZeros[0]}:{timesWithZeros[1]}",
+            f"{timesWithZeros[2]}:{timesWithZeros[3]}",
+        )
 
     @property
     def progress(self):
@@ -113,30 +118,30 @@ class Track:
         # [========]
         if progress == 0:
             return (
-                config['bot.emoji']['progress_start_0']
-                + config['bot.emoji']['progress'] * 8
-                + config['bot.emoji']['progress_end']
+                config["bot.emoji"]["progress_start_0"]
+                + config["bot.emoji"]["progress"] * 8
+                + config["bot.emoji"]["progress_end"]
             )
         elif progress == 1:
             return (
-                config['bot.emoji']['progress_start']
-                + config['bot.emoji']['progress_mix']
-                + config['bot.emoji']['progress'] * 7
-                + config['bot.emoji']['progress_end']
+                config["bot.emoji"]["progress_start"]
+                + config["bot.emoji"]["progress_mix"]
+                + config["bot.emoji"]["progress"] * 7
+                + config["bot.emoji"]["progress_end"]
             )
         elif progress >= 10:
             return (
-                config['bot.emoji']['progress_start']
-                + config['bot.emoji']['progress_fill'] * 8
-                + config['bot.emoji']['progress_fill_end']
+                config["bot.emoji"]["progress_start"]
+                + config["bot.emoji"]["progress_fill"] * 8
+                + config["bot.emoji"]["progress_fill_end"]
             )
         else:
             return (
-                config['bot.emoji']['progress_start']
-                + config['bot.emoji']['progress_fill'] * (progress - 1)
-                + config['bot.emoji']['progress_mix']
-                + config['bot.emoji']['progress'] * (8 - progress)
-                + config['bot.emoji']['progress_end']
+                config["bot.emoji"]["progress_start"]
+                + config["bot.emoji"]["progress_fill"] * (progress - 1)
+                + config["bot.emoji"]["progress_mix"]
+                + config["bot.emoji"]["progress"] * (8 - progress)
+                + config["bot.emoji"]["progress_end"]
             )
 
         # 10 slices,

@@ -1,13 +1,14 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
 from urllib.parse import urlencode
-import requests, os
+import requests
+import os
 from dotenv import load_dotenv
+from utils.subscriptions import Subscription
 
 load_dotenv()
 app = FastAPI()
 
-from utils.subscriptions import Subscription
 
 class OauthBody(BaseModel):
     code: str
@@ -27,8 +28,9 @@ def token(oauthBody: OauthBody):
         headers={"Content-Type": "application/x-www-form-urlencoded"},
         data=urlencode(data),
     )
-    
+
     return res.json()
+
 
 @app.get("/api/test")
 def test():

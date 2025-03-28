@@ -19,9 +19,8 @@ from utils.embeds import (
 )
 from queue import Empty
 import yt_dlp
-import os, random, asyncio
-from spotdl import Downloader
-from spotdl.utils.search import get_simple_songs
+import random
+import asyncio
 
 
 class Player(commands.Cog):
@@ -137,7 +136,7 @@ class Player(commands.Cog):
         subscription = self.subscriptions.get(ctx.guild_id)
         random.shuffle(subscription.queue)
         await ctx.respond(
-            embed=SuccessEmbed(self.bot.user, f"Shuffle complete"), ephemeral=ephemeral
+            embed=SuccessEmbed(self.bot.user, "Shuffle complete"), ephemeral=ephemeral
         )
 
     @commands.slash_command(description="Skip to next song")
@@ -152,7 +151,7 @@ class Player(commands.Cog):
             embed.set_thumbnail(url=track.thumbnail)
             await ctx.followup.send(embed=embed, ephemeral=ephemeral)
         except Empty:
-            await ctx.followup.send(embed=SuccessEmbed(self.bot.user, f"No song left"))
+            await ctx.followup.send(embed=SuccessEmbed(self.bot.user, "No song left"))
 
     @commands.slash_command(description="Leave current channel")
     async def leave(self, ctx: ApplicationContext):
@@ -169,7 +168,6 @@ class Player(commands.Cog):
             await ctx.respond(embed=ErrorEmbed(self.bot.user, "Not playing now."))
             return
         if subscription and not subscription.checkLock:
-
             if realtime:
                 message = await ctx.respond(
                     embed=NowPlayingEmbed(

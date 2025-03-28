@@ -1,7 +1,9 @@
 __pycache__/
 .env
 music/
-bot/config.ini
+mygo-ave-video/
+.data/
+config.ini
 
 # Logs
 logs

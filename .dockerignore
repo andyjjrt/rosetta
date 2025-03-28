@@ -1,2 +1,10 @@
 __pycache__/
-bot/config.ini
+.github/
+.ruff_cache/
+.venv/
+
+music/
+mygo-ave-video/
+
+config.example.ini
+config.ini
