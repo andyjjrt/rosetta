@@ -2,6 +2,7 @@ from discord import Bot, ApplicationContext
 from discord.ext import commands
 from utils.embeds import PingEmbed, InfoEmbed
 import os
+from yt_dlp.version import __version__
 
 
 class Basics(commands.Cog):
@@ -17,4 +18,7 @@ class Basics(commands.Cog):
 
     @commands.slash_command()
     async def version(self, ctx: ApplicationContext):
-        await ctx.respond(embed=InfoEmbed(self.bot.user, os.getenv("ROSETTA_VERSION")))
+        embed = InfoEmbed(self.bot.user, "")
+        embed.add_field(name="version", value=os.getenv("ROSETTA_VERSION"))
+        embed.add_field(name="yt-dlp version", value=__version__)
+        await ctx.respond(embed=embed)
