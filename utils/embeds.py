@@ -3,6 +3,7 @@ from discord import Embed, EmbedField, EmbedFooter, Colour, User
 from datetime import datetime
 from utils.track import Track
 import configparser
+from pydantic_ai.agent import AgentRunResult
 
 config = configparser.ConfigParser()
 config.read("config.ini")
@@ -99,3 +100,19 @@ def ProcessingEmbed(user: User, message: str = "Processing..."):
         description=message,
         colour=Colour.blurple(),
     )
+
+
+def OllamaEmbed(text: str, result: AgentRunResult[str]):
+    usage = result
+    print(usage)
+    embed = Embed(
+        title=":llama: Ollama response",
+        colour=Colour.dark_blue(),
+        footer=EmbedFooter(text=f"test"),
+        timestamp=datetime.now(),
+    )
+
+    embed.add_field(name="Input", value=text, inline=False)
+    embed.add_field(name="Output", value=result.data, inline=False)
+
+    return embed

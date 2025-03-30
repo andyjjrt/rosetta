@@ -8,6 +8,7 @@ from utils.embeds import ErrorEmbed
 from commands.basics import Basics
 from commands.play import Player
 from commands.mygo import Mygo
+from commands.ollama import Ollama
 
 from api.main import app  # noqa: F401
 
@@ -53,6 +54,7 @@ async def on_application_command(ctx: discord.ApplicationContext):
 bot.add_cog(Basics(bot))
 bot.add_cog(Player(bot))
 bot.add_cog(Mygo(bot))
+bot.add_cog(Ollama(bot))
 
 
 async def run():
