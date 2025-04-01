@@ -8,8 +8,8 @@ from discord import (
 )
 from discord.ext import commands
 from utils.embeds import SuccessEmbed, InfoEmbed
-import os
 from ollama import list, pull, chat
+from utils import split_markdown
 
 
 class Ollama(commands.Cog):
@@ -37,7 +37,7 @@ class Ollama(commands.Cog):
         await ctx.respond(embed=embed)
 
     @ollama.command(description="Pull model")
-    @commands.is_owner() 
+    @commands.is_owner()
     @option(
         "model",
         type=SlashCommandOptionType.string,
@@ -62,4 +62,9 @@ class Ollama(commands.Cog):
         await ctx.defer()
         message = {"role": "user", "content": content}
         result = chat(model=model, messages=[message])
-        await ctx.respond(result.message.content)
+        content = split_markdown(result.message.content)
+        message = await ctx.respond(content[0])
+        if len(content) > 1:
+            channel = message.channel
+            for c in content[1:]:
+                await channel.send(c)
