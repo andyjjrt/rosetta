@@ -10,8 +10,9 @@ WORKDIR /app
 
 RUN apk add ffmpeg
 RUN uv sync --frozen  --no-dev
+# RUN uv add -U yt-dlp
 
 VOLUME [ "/app/music" ]
 VOLUME [ "/app/mygo-ave-video" ]
 
-CMD ["uv", "run", "uvicorn", "main:app"]
+CMD ["sh", "-c", "uv add -U yt-dlp && uv run uvicorn main:app"]
