@@ -3,7 +3,8 @@ from discord import Embed, EmbedField, EmbedFooter, Colour, User
 from datetime import datetime
 from utils.track import Track
 import configparser
-from pydantic_ai.agent import AgentRunResult
+
+from openai.types.completion_usage import CompletionUsage
 
 config = configparser.ConfigParser()
 config.read("config.ini")
@@ -102,17 +103,17 @@ def ProcessingEmbed(user: User, message: str = "Processing..."):
     )
 
 
-def OllamaEmbed(text: str, result: AgentRunResult[str]):
-    usage = result
-    print(usage)
+def LLMPerformanceEmbed(model: str, ttft: float, tps: float, usage: CompletionUsage):
     embed = Embed(
-        title=":llama: Ollama response",
+        title=":bar_chart:  LLM Performance",
         colour=Colour.dark_blue(),
-        footer=EmbedFooter(text=f"test"),
         timestamp=datetime.now(),
     )
 
-    embed.add_field(name="Input", value=text, inline=False)
-    embed.add_field(name="Output", value=result.data, inline=False)
+    embed.add_field(name="Model", value=model, inline=False)
+    embed.add_field(name="TTFT", value=ttft, inline=False)
+    embed.add_field(name="TPS", value=tps, inline=False)
+    embed.add_field(name="Input Tokens", value=usage.prompt_tokens, inline=False)
+    embed.add_field(name="Output Tokens", value=usage.completion_tokens, inline=False)
 
     return embed

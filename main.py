@@ -2,13 +2,15 @@ import discord
 from discord.ext import commands
 import logging
 import asyncio
-import configparser
 
+from langfuse import Langfuse
+
+from utils.config import TOKEN
 from utils.embeds import ErrorEmbed
 from commands.basics import Basics
 from commands.play import Player
 from commands.mygo import Mygo
-from commands.ollama import Ollama
+from commands.chat import LLM
 
 from api.main import app  # noqa: F401
 
@@ -17,17 +19,13 @@ intents = discord.Intents.default()
 intents.guilds = True
 intents.voice_states = True
 
-config = configparser.ConfigParser()
-config.read("config.ini")
-
 bot = discord.Bot(intents=intents)
-TOKEN = config["bot"].get("TOKEN")
 
 logger = logging.getLogger("uvicorn.error")
 
-
 @bot.event
 async def on_ready():
+    await bot.sync_commands()
     logger.info(f"We have logged in as {bot.user}")
     status = discord.Activity(type=discord.ActivityType.listening, name="/play")
     await bot.change_presence(status=discord.Status.online, activity=status)
@@ -54,7 +52,7 @@ async def on_application_command(ctx: discord.ApplicationContext):
 bot.add_cog(Basics(bot))
 bot.add_cog(Player(bot))
 bot.add_cog(Mygo(bot))
-bot.add_cog(Ollama(bot))
+bot.add_cog(LLM(bot))
 
 
 async def run():

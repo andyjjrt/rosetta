@@ -15,4 +15,6 @@ RUN uv sync --frozen  --no-dev
 VOLUME [ "/app/music" ]
 VOLUME [ "/app/mygo-ave-video" ]
 
+ENV LANGFUSE_TRACING_ENVIRONMENT=production
+
 CMD ["sh", "-c", "uv add -U yt-dlp && uv run uvicorn main:app"]
