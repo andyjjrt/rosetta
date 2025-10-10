@@ -1,6 +1,6 @@
 #!/bin/bash
 
-Define an array
+# Define an array
 my_array=(
   "https://youtu.be/WOrYBIYIwyk::1-3"
   "https://youtu.be/ijdspfPMzYc::4"

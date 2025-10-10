@@ -1,7 +1,8 @@
 FROM python:3.12.9-alpine3.21
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-ADD . /app
+COPY rosetta /app/rosetta
+COPY .python-version uv.lock pyproject.toml /app/
 
 ARG ROSETTA_VERSION
 ENV ROSETTA_VERSION=$ROSETTA_VERSION
@@ -17,4 +18,4 @@ VOLUME [ "/app/mygo-ave-video" ]
 
 ENV LANGFUSE_TRACING_ENVIRONMENT=production
 
-CMD ["sh", "-c", "uv add -U yt-dlp && uv run uvicorn main:app"]
+CMD ["/app/.venv/bin/python", "-m", "rosetta"]

@@ -1,9 +1,11 @@
-from discord import VoiceClient, Bot
-from discord.channel import TextChannel
-from queue import Empty
-from utils.track import Track
-from utils.embeds import LeaveEmbed
 import asyncio
+from queue import Empty
+
+from discord import Bot, VoiceClient
+from discord.channel import TextChannel
+
+from .embeds import LeaveEmbed
+from .track import Track
 
 
 class Queue:

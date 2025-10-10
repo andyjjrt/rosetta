@@ -1,11 +1,15 @@
-from discord import Bot, ApplicationContext
-from discord.ext import commands
-from utils.embeds import PingEmbed, InfoEmbed
 import os
+
+from discord import ApplicationContext, Bot
+from discord.ext import commands
 from yt_dlp.version import __version__
+
+from ..utils.embeds import InfoEmbed, PingEmbed
 
 
 class Basics(commands.Cog):
+    __cog_name__ = "Basics"
+
     def __init__(self, bot: Bot):
         self.bot = bot
 

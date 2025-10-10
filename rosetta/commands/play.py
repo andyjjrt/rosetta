@@ -1,29 +1,33 @@
+import asyncio
+import random
+from queue import Empty
 from typing import List
+
 import discord
+import yt_dlp
 from discord import (
+    ApplicationContext,
     Bot,
     option,
-    ApplicationContext,
 )
 from discord.ext import commands, tasks
-from utils.track import Track
-from utils.subscriptions import Subscription
-from utils.embeds import (
-    SuccessEmbed,
-    SearchEmbed,
+
+from ..utils.embeds import (
+    ErrorEmbed,
+    InfoEmbed,
     LeaveEmbed,
     NowPlayingEmbed,
-    InfoEmbed,
-    ErrorEmbed,
     ProcessingEmbed,
+    SearchEmbed,
+    SuccessEmbed,
 )
-from queue import Empty
-import yt_dlp
-import random
-import asyncio
+from ..utils.subscriptions import Subscription
+from ..utils.track import Track
 
 
 class Player(commands.Cog):
+    __cog_name__ = "Player"
+
     subscriptions = Subscription()
 
     def __init__(self, bot: Bot):

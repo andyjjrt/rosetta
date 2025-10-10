@@ -1,10 +1,11 @@
-from discord import FFmpegOpusAudio, Member, User
 import asyncio
-import os
-import math
-import yt_dlp
-import ffmpeg
 import configparser
+import math
+import os
+
+import ffmpeg
+import yt_dlp
+from discord import FFmpegOpusAudio, Member, User
 
 config = configparser.ConfigParser()
 config.read("config.ini")

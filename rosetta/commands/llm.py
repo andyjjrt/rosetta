@@ -1,10 +1,12 @@
+import logging
 import time
+
 import discord
-from langfuse import get_client, openai
-from openai.types.completion_usage import CompletionUsage
 from discord.ext import commands
-from utils.embeds import LLMPerformanceEmbed, InfoEmbed
-from utils.config import LLM as LLMConfig
+from langfuse import get_client, openai
+
+from ..utils.config import LLM as LLMConfig
+from ..utils.embeds import InfoEmbed
 
 client = openai.AsyncOpenAI(
     base_url=LLMConfig.get("BASE_URL"),
@@ -12,6 +14,7 @@ client = openai.AsyncOpenAI(
 )
 
 langfuse_client = get_client()
+logger = logging.getLogger("rosetta")
 
 UPDATE_INTERVAL_SECONDS = 1
 DISCORD_CHAR_LIMIT = 2000
@@ -63,6 +66,8 @@ def find_best_split_position(text: str, max_len: int) -> int:
 
 
 class LLM(commands.Cog):
+    __cog_name__ = "LLM"
+
     def __init__(self, bot: discord.Bot):
         self.bot = bot
         self.response_queue = {}
@@ -183,13 +188,7 @@ class LLM(commands.Cog):
                 end_time = time.time()
 
             except Exception as e:
-                end_time = time.time()  # Log end time even on failure
-                error_message = f"An unexpected error occurred: {e}"
-                print(f"Error during stream for prompt '{prompt}': {error_message}")
-
-                if response_messages:
-                    await response_messages[-1].edit(content=error_message)
-                return
+                raise e
 
             ttft, tps, completion_tokens = 0.0, 0.0, 0
             if usage:

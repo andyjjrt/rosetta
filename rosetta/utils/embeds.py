@@ -1,10 +1,11 @@
-from typing import List
-from discord import Embed, EmbedField, EmbedFooter, Colour, User
-from datetime import datetime
-from utils.track import Track
 import configparser
+from datetime import datetime
+from typing import List
 
+from discord import Colour, Embed, EmbedField, EmbedFooter, User
 from openai.types.completion_usage import CompletionUsage
+
+from .track import Track
 
 config = configparser.ConfigParser()
 config.read("config.ini")

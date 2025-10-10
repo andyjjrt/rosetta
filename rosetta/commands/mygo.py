@@ -1,16 +1,19 @@
-import discord
-from discord import Bot, option, ApplicationContext
-from discord.ext import commands
-import os
-import json
-import ffmpeg
-import io
 import asyncio
-import subprocess
+import io
+import json
+import os
 import re
+import subprocess
+
+import discord
+import ffmpeg
+from discord import ApplicationContext, Bot, option
+from discord.ext import commands
 
 
 class Mygo(commands.Cog):
+    __cog_name__ = "Mygo"
+
     FOLDER = "mygo-ave-video"
     data = []
 
