@@ -154,11 +154,13 @@ class Track:
             data = await loop.run_in_executor(
                 None, lambda: ytdl.extract_info(url, download=False)
             )
-            # if errorCode:
-            #     raise Exception(errorCode)
+            if data.get("_type") == "url":
+                data = await loop.run_in_executor(
+                    None, lambda: ytdl.extract_info(data.get("url"), download=False)
+                )
             title = data.get("title")
             url = data.get("original_url")
-            thumbnail = data["thumbnails"][0]["url"]
+            thumbnail = data.get("thumbnails")[0]["url"]
             if "entries" in data:
                 data = data["entries"]
             else:
