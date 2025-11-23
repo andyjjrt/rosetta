@@ -1,0 +1,7 @@
+services:
+  rosetta:
+    image: ghcr.io/andyjjrt/rosetta:latest
+    volumes:
+      - ./music:/app/music
+      - ./config.ini:/app/config.ini
+      - ./mygo-ave-video:/app/mygo-ave-video
