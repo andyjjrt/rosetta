@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from queue import Empty
 
 from discord import Bot, VoiceClient
@@ -22,6 +23,7 @@ class Queue:
         self.bot = bot
         self.guildId = guildId
         self.queue = tracks
+        self.logger = logging.getLogger("rosetta")
 
         self.nowPlaying: Track | None = None
         self.checkLock = False
@@ -53,21 +55,21 @@ class Queue:
         self.task.cancel()
 
     async def _process(self):
-        if len(self.queue) == 0:
-            if self.loop == "Off":
-                self.checkLock = False
-                raise Empty
-        else:
-            if self.loop != "One" or not self.nowPlaying:
-                if self.loop == "Queue":
-                    self.queue.append(self.nowPlaying)
-                track = self.queue.pop(0)
-                self.nowPlaying = track
-            player = await self.nowPlaying.createAudio()
-            self.voiceClient.play(
-                player, after=lambda e: print(f"Player error: {e}") if e else None
-            )
+        if self.loop == "Off" and len(self.queue) == 0:
             self.checkLock = False
+            raise Empty
+        if self.loop != "One" or not self.nowPlaying:
+            if self.loop == "Queue":
+                self.queue.append(self.nowPlaying)
+            track = self.queue.pop(0)
+            self.nowPlaying = track
+
+        player = await self.nowPlaying.createAudio()
+        self.voiceClient.play(
+            player,
+            after=lambda e: self.logger.error(f"Player error: {e}") if e else None,
+        )
+        self.checkLock = False
 
     async def _startSession(self):
         while True:
@@ -109,7 +111,6 @@ class Subscription:
             tracks,
             loop,
         )
-        print(self._serverStatus)
 
     def remove(self, guildId: str):
         if guildId not in self._serverStatus:

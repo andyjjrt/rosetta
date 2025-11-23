@@ -32,3 +32,5 @@ dist-ssr
 
 .venv
 .ruff_cache
+
+config.ini
