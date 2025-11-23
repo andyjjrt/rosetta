@@ -1,6 +1,5 @@
-FROM python:3.12.12-slim-bookworm
+FROM python:3.12.11-alpine3.21
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-COPY --from=denoland/deno:bin-2.5.6 /deno /usr/local/bin/deno
 
 COPY rosetta /app/rosetta
 COPY .python-version uv.lock pyproject.toml /app/
@@ -10,7 +9,7 @@ ENV ROSETTA_VERSION=$ROSETTA_VERSION
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y ffmpeg
+RUN apk update && apk add ffmpeg deno
 RUN uv sync --frozen  --no-dev
 # RUN uv add -U yt-dlp
 
