@@ -1,6 +1,7 @@
 FROM python:3.12.9-alpine3.21
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
-COPY --from=denoland/deno:bin-2.5.6 /deno /usr/local/bin/deno
+
+RUN curl -fsSL https://deno.land/install.sh | DENO_INSTALL=/usr/local sh -s -- -y
 
 COPY rosetta /app/rosetta
 COPY .python-version uv.lock pyproject.toml /app/
