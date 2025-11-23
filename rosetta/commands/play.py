@@ -215,7 +215,7 @@ class Player(commands.Cog):
         await self.ensure_voice(ctx)
         subscription = self.subscriptions.get(ctx.guild_id)
         if not subscription:
-            raise commands.CommandError("You are not plaing in this guild.")
+            raise commands.CommandError("You are not playing in this guild.")
 
     @commands.Cog.listener("on_voice_state_update")
     async def lonelyListener(
