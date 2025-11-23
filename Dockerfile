@@ -10,7 +10,7 @@ ENV ROSETTA_VERSION=$ROSETTA_VERSION
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install ffmpeg
+RUN apt-get update && apt-get install -y ffmpeg
 RUN uv sync --frozen  --no-dev
 # RUN uv add -U yt-dlp
 
