@@ -1,0 +1,49 @@
+Metadata-Version: 2.4
+Name: rosetta
+Version: 0.6.1
+Summary: A discord music bot, with other cool stuffs
+Requires-Python: >=3.12
+Description-Content-Type: text/markdown
+Requires-Dist: discord.py>=2.4.0
+Requires-Dist: ffmpeg-python>=0.2.0
+Requires-Dist: langfuse>=3.6.1
+Requires-Dist: pydantic-ai-slim[openai]>=0.0.46
+Requires-Dist: pynacl>=1.5.0
+Requires-Dist: pyyaml>=6.0.3
+Requires-Dist: rich>=14.2.0
+Requires-Dist: yt-dlp[default]>=2025.11.12
+
+# Rosetta
+
+## Install
+1. Create config fie `config.ini`
+```ini
+[bot]
+TOKEN=xxx
+CLIENT_ID=xxx
+[bot.emoji]
+success=<:name:xxx>
+error=<:name:xxx>
+youtube=<:name:xxx>
+progress_start=<:name:xxx>
+progress=<:name:xxx>
+progress_mix=<:name:xxx>
+progress_fill=<:name:xxx>
+progress_end=<:name:xxx>
+progress_fill_end=<:name:xxx>
+progress_start_0=<:name:xxx>
+```
+
+2. Use [scripts/mygo-ave-preprocess.sh](scripts/mygo-ave-preprocess.sh) preprocess the video
+
+3. Use `docker compose up -d` to start your service
+
+```yml
+services:
+  rosetta:
+    image: ghcr.io/andyjjrt/rosetta:latest
+    volumes:
+      - ./music:/app/music
+      - ./config.ini:/app/config.ini
+      - ./mygo-ave-video:/app/mygo-ave-video
+```

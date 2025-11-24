@@ -1,7 +1,7 @@
 import asyncio
 import random
 from queue import Empty
-from typing import List, Optional
+from typing import List
 
 import discord
 import yt_dlp
@@ -147,9 +147,7 @@ class Player(commands.Cog):
 
     @app_commands.command(name="shuffle", description="Shuffle")
     @app_commands.describe(ephemeral="hide response")
-    async def shuffle(
-        self, interaction: discord.Interaction, ephemeral: bool = False
-    ):
+    async def shuffle(self, interaction: discord.Interaction, ephemeral: bool = False):
         await self.ensure_subscription(interaction)
         subscription = self.subscriptions.get(interaction.guild_id)
         random.shuffle(subscription.queue)
@@ -290,7 +288,9 @@ class SearchSelectView(discord.ui.View):
     ):
         super().__init__(timeout=timeout)
         self.add_item(SearchSelect(player, tracks, interaction))
-        self.add_item(SearchButton(player, tracks, interaction, label="Search", emoji="🔎"))
+        self.add_item(
+            SearchButton(player, tracks, interaction, label="Search", emoji="🔎")
+        )
         self.add_item(ToggleButton(emoji="🔝", custom_id="Top"))
 
 
@@ -321,7 +321,9 @@ class SearchModal(discord.ui.Modal):
 
 
 class SearchSelect(discord.ui.Select):
-    def __init__(self, player: Player, tracks: List[Track], interaction: discord.Interaction):
+    def __init__(
+        self, player: Player, tracks: List[Track], interaction: discord.Interaction
+    ):
         options = [
             discord.SelectOption(
                 label=track.title,
@@ -421,7 +423,9 @@ class NowPlayingView(discord.ui.View):
         style=discord.ButtonStyle.primary,
         emoji="🔀",
     )
-    async def shuffle(self, button: discord.ui.Button, interaction: discord.Interaction):
+    async def shuffle(
+        self, button: discord.ui.Button, interaction: discord.Interaction
+    ):
         await self.player.shuffle(interaction, True)
 
     @discord.ui.button(
@@ -430,7 +434,9 @@ class NowPlayingView(discord.ui.View):
         style=discord.ButtonStyle.primary,
         emoji="♾️",
     )
-    async def stopSync(self, button: discord.ui.Button, interaction: discord.Interaction):
+    async def stopSync(
+        self, button: discord.ui.Button, interaction: discord.Interaction
+    ):
         self.player.updateNowPlaying.cancel()
         self.disable_all_items()
         await interaction.response.edit_message(view=self)

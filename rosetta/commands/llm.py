@@ -106,7 +106,9 @@ class LLM(commands.Cog):
                 metadata={
                     "discord_username": interaction.user.name,
                     "channel_id": str(interaction.channel.id),
-                    "guild_id": str(interaction.guild.id) if interaction.guild else "DM",
+                    "guild_id": str(interaction.guild.id)
+                    if interaction.guild
+                    else "DM",
                 },
             )
 

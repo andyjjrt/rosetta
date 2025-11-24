@@ -40,7 +40,8 @@ async def on_app_command_error(
         original_error = error.original
         if isinstance(original_error, commands.CommandError):
             await interaction.response.send_message(
-                embed=ErrorEmbed(bot.user, f"[Command] {original_error}"), ephemeral=True
+                embed=ErrorEmbed(bot.user, f"[Command] {original_error}"),
+                ephemeral=True,
             )
         else:
             await interaction.response.send_message(
