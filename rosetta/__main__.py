@@ -1,4 +1,5 @@
 import logging
+import os
 from pathlib import Path
 
 import discord
@@ -16,7 +17,13 @@ intents = discord.Intents.default()
 intents.guilds = True
 intents.voice_states = True
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+pod_name = os.environ.get("SHARD_ID", "rosetta-0")
+shard_id = int(pod_name.split("-")[-1])
+total_shards = int(os.environ.get("TOTAL_SHARDS", 1))
+
+bot = commands.Bot(
+    command_prefix="!", intents=intents, shard_id=shard_id, shard_count=total_shards
+)
 
 
 @bot.event

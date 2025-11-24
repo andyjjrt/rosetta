@@ -145,9 +145,8 @@ class Player(commands.Cog):
             view=SearchSelectView(self, tracks, interaction),
         )
 
-    @app_commands.command(name="shuffle", description="Shuffle")
-    @app_commands.describe(ephemeral="hide response")
-    async def shuffle(self, interaction: discord.Interaction, ephemeral: bool = False):
+    async def do_shuffle(self, interaction: discord.Interaction, ephemeral: bool = False):
+        """Helper method to shuffle the queue"""
         await self.ensure_subscription(interaction)
         subscription = self.subscriptions.get(interaction.guild_id)
         random.shuffle(subscription.queue)
@@ -155,9 +154,8 @@ class Player(commands.Cog):
             embed=SuccessEmbed(self.bot.user, "Shuffle complete"), ephemeral=ephemeral
         )
 
-    @app_commands.command(name="skip", description="Skip to next song")
-    @app_commands.describe(ephemeral="hide response")
-    async def skip(self, interaction: discord.Interaction, ephemeral: bool = False):
+    async def do_skip(self, interaction: discord.Interaction, ephemeral: bool = False):
+        """Helper method to skip to the next song"""
         await self.ensure_subscription(interaction)
         await interaction.response.defer(ephemeral=ephemeral)
         subscription = self.subscriptions.get(interaction.guild_id)
@@ -172,6 +170,16 @@ class Player(commands.Cog):
             await interaction.followup.send(
                 embed=SuccessEmbed(self.bot.user, "No song left")
             )
+
+    @app_commands.command(name="shuffle", description="Shuffle")
+    @app_commands.describe(ephemeral="hide response")
+    async def shuffle(self, interaction: discord.Interaction, ephemeral: bool = False):
+        await self.do_shuffle(interaction, ephemeral)
+
+    @app_commands.command(name="skip", description="Skip to next song")
+    @app_commands.describe(ephemeral="hide response")
+    async def skip(self, interaction: discord.Interaction, ephemeral: bool = False):
+        await self.do_skip(interaction, ephemeral)
 
     @app_commands.command(name="leave", description="Leave current channel")
     async def leave(self, interaction: discord.Interaction):
@@ -215,13 +223,16 @@ class Player(commands.Cog):
         if not subscription:
             self.updateNowPlaying.cancel()
         if subscription and not subscription.checkLock:
-            message = self.bot.get_message(message_id)
-            if message:
-                await message.edit(
-                    embed=NowPlayingEmbed(
-                        track=subscription.nowPlaying, queue=subscription.queue
+            try:
+                message = await subscription.messageChannel.fetch_message(message_id)
+                if message:
+                    await message.edit(
+                        embed=NowPlayingEmbed(
+                            track=subscription.nowPlaying, queue=subscription.queue
+                        )
                     )
-                )
+            except discord.NotFound:
+                self.updateNowPlaying.cancel()
 
     async def ensure_voice(self, interaction: discord.Interaction):
         voice_client = interaction.guild.voice_client if interaction.guild else None
@@ -343,9 +354,14 @@ class SearchSelect(discord.ui.Select):
         self.original_interaction = interaction
 
     async def callback(self, interaction: discord.Interaction):
+        # Find the "Top" toggle button by custom_id
+        top_button = next(
+            (item for item in self.view.children if getattr(item, 'custom_id', None) == "Top"),
+            None
+        )
         top = (
             True
-            if self.view.get_item("Top").style == discord.ButtonStyle.success
+            if top_button and top_button.style == discord.ButtonStyle.success
             else False
         )
         self.view.clear_items()
@@ -416,8 +432,8 @@ class NowPlayingView(discord.ui.View):
     @discord.ui.button(
         label="Skip", custom_id="skip", style=discord.ButtonStyle.primary, emoji="⏩"
     )
-    async def skip(self, button: discord.ui.Button, interaction: discord.Interaction):
-        await self.player.skip(interaction, True)
+    async def skip(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.player.do_skip(interaction, True)
 
     @discord.ui.button(
         label="Shuffle",
@@ -426,9 +442,9 @@ class NowPlayingView(discord.ui.View):
         emoji="🔀",
     )
     async def shuffle(
-        self, button: discord.ui.Button, interaction: discord.Interaction
+        self, interaction: discord.Interaction, button: discord.ui.Button
     ):
-        await self.player.shuffle(interaction, True)
+        await self.player.do_shuffle(interaction, True)
 
     @discord.ui.button(
         label="Stop Sync",
@@ -437,8 +453,8 @@ class NowPlayingView(discord.ui.View):
         emoji="♾️",
     )
     async def stopSync(
-        self, button: discord.ui.Button, interaction: discord.Interaction
+        self, interaction: discord.Interaction, button: discord.ui.Button
     ):
         self.player.updateNowPlaying.cancel()
-        self.disable_all_items()
+        self.clear_items()
         await interaction.response.edit_message(view=self)

@@ -1,6 +1,6 @@
 [project]
 name = "rosetta"
-version = "0.6.1"
+version = "0.9.0"
 description = "A discord music bot, with other cool stuffs"
 readme = "README.md"
 requires-python = ">=3.12"
