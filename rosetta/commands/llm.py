@@ -2,6 +2,7 @@ import logging
 import time
 
 import discord
+from discord import app_commands
 from discord.ext import commands
 from langfuse import get_client, openai
 
@@ -21,14 +22,15 @@ DISCORD_CHAR_LIMIT = 2000
 SAFE_SPLIT_LIMIT = 1980
 
 
-async def get_models(ctx: discord.AutocompleteContext):
-    text = ctx.options["model"]
-    if await ctx.bot.is_owner(ctx.interaction.user):
+async def get_models_autocomplete(
+    interaction: discord.Interaction, current: str
+) -> list[app_commands.Choice[str]]:
+    if await interaction.client.is_owner(interaction.user):
         models_list = await client.models.list()
         models = [m.id for m in models_list.data]
     else:
         models = [LLMConfig.get("DEFAULT_MODEL")]
-    return [m for m in models if text in m][:25]
+    return [app_commands.Choice(name=m, value=m) for m in models if current in m][:25]
 
 
 def find_best_split_position(text: str, max_len: int) -> int:
@@ -66,54 +68,35 @@ def find_best_split_position(text: str, max_len: int) -> int:
 
 
 class LLM(commands.Cog):
-    __cog_name__ = "LLM"
-
-    def __init__(self, bot: discord.Bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.response_queue = {}
 
-    llm = discord.SlashCommandGroup(
-        "llm",
-        integration_types=set(
-            [
-                discord.IntegrationType.user_install,
-                discord.IntegrationType.guild_install,
-            ]
-        ),
-    )
+    llm_group = app_commands.Group(name="llm", description="LLM commands")
 
-    @llm.command(description="List all models")
-    async def list(self, ctx: discord.ApplicationContext):
+    @llm_group.command(name="list", description="List all models")
+    async def list_models(self, interaction: discord.Interaction):
         res = await client.models.list()
         embed = InfoEmbed(
             self.bot.user,
             "\n".join([f"- {m.id}" for m in res.data]),
         )
-        await ctx.respond(embed=embed)
+        await interaction.response.send_message(embed=embed)
 
-    @llm.command(
-        description="Chat with a model",
-    )
-    @discord.option(
-        "prompt",
-        type=discord.SlashCommandOptionType.string,
-    )
-    @discord.option(
-        "model",
-        type=discord.SlashCommandOptionType.string,
-        autocomplete=get_models,
-        required=False,
-        default=LLMConfig.get("DEFAULT_MODEL"),
-    )
+    @llm_group.command(name="chat", description="Chat with a model")
+    @app_commands.describe(prompt="Your prompt", model="Model to use")
+    @app_commands.autocomplete(model=get_models_autocomplete)
     async def chat(
         self,
-        ctx: discord.ApplicationContext,
+        interaction: discord.Interaction,
         prompt: str,
-        model: str,
+        model: str = None,
     ):
-        await ctx.defer()
+        if model is None:
+            model = LLMConfig.get("DEFAULT_MODEL")
+        await interaction.response.defer()
 
-        user_id = str(ctx.author.id)
+        user_id = str(interaction.user.id)
         with langfuse_client.start_as_current_span(
             name="discord-ask-command",
             input=prompt,
@@ -121,9 +104,9 @@ class LLM(commands.Cog):
             root_span.update_trace(
                 user_id=user_id,
                 metadata={
-                    "discord_username": ctx.author.name,
-                    "channel_id": str(ctx.channel.id),
-                    "guild_id": str(ctx.guild.id) if ctx.guild else "DM",
+                    "discord_username": interaction.user.name,
+                    "channel_id": str(interaction.channel.id),
+                    "guild_id": str(interaction.guild.id) if interaction.guild else "DM",
                 },
             )
 
@@ -132,7 +115,9 @@ class LLM(commands.Cog):
             full_response = ""
             start_time, first_token_time, end_time = None, None, None
 
-            initial_message = await ctx.respond(f"🧠 Thinking with `{model}`...")
+            initial_message = await interaction.followup.send(
+                f"🧠 Thinking with `{model}`...", wait=True
+            )
             response_messages.append(initial_message)
             last_update_time = time.time()
 
@@ -174,7 +159,9 @@ class LLM(commands.Cog):
                             await response_messages[-1].edit(
                                 content=text_to_send.strip()
                             )
-                            response_messages.append(await ctx.send("..."))
+                            response_messages.append(
+                                await interaction.channel.send("...")
+                            )
                             current_message_content = carry_over_text.lstrip()
                             last_update_time = time.time()
 
@@ -212,7 +199,7 @@ class LLM(commands.Cog):
                     # If it's too long, edit the last message with just the content...
                     await response_messages[-1].edit(content=final_content)
                     # ...and send the stats in a new, separate message.
-                    await ctx.send(stats_text.strip())
+                    await interaction.channel.send(stats_text.strip())
                 else:
                     # If it fits, combine them and edit the last message.
                     final_combined_content = final_content + stats_text

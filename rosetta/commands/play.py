@@ -1,15 +1,11 @@
 import asyncio
 import random
 from queue import Empty
-from typing import List
+from typing import List, Optional
 
 import discord
 import yt_dlp
-from discord import (
-    ApplicationContext,
-    Bot,
-    option,
-)
+from discord import app_commands
 from discord.ext import commands, tasks
 
 from ..utils.embeds import (
@@ -26,50 +22,51 @@ from ..utils.track import Track
 
 
 class Player(commands.Cog):
-    __cog_name__ = "Player"
-
     subscriptions = Subscription()
 
-    def __init__(self, bot: Bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
 
     async def _play(
-        self, ctx: ApplicationContext, url: str, loop: str, shuffle: bool, top: bool
+        self,
+        interaction: discord.Interaction,
+        url: str,
+        loop: str,
+        shuffle: bool,
+        top: bool,
     ):
         try:
-            tracks = await Track.from_url(url, ctx.author)
+            tracks = await Track.from_url(url, interaction.user)
         except Exception as e:
             raise commands.CommandError(f"[yt-dlp] {e}")
 
-        if ctx.voice_client is None:
-            await ctx.author.voice.channel.connect()
-            # Insure deafen
-            # await ctx.author.voice.channel.guild.change_voice_state(
-            #     channel=ctx.author.voice.channel, self_deaf=True
-            # )
+        voice_client = interaction.guild.voice_client if interaction.guild else None
+        if voice_client is None:
+            if interaction.user.voice and interaction.user.voice.channel:
+                voice_client = await interaction.user.voice.channel.connect()
 
         if shuffle:
             random.shuffle(tracks["tracks"])
 
-        subscription = self.subscriptions.get(ctx.guild_id)
+        subscription = self.subscriptions.get(interaction.guild_id)
         if subscription:
             subscription.addTracks(tracks["tracks"], top)
         else:
             self.subscriptions.createQueue(
                 self.bot.user,
-                ctx.guild_id,
-                ctx.channel,
-                ctx.voice_client,
+                interaction.guild_id,
+                interaction.channel,
+                voice_client,
                 tracks["tracks"],
                 loop,
             )
         embed = SuccessEmbed(
-            ctx.author, f"Enqueued [**{tracks['title']}**]({tracks['url']})"
+            interaction.user, f"Enqueued [**{tracks['title']}**]({tracks['url']})"
         )
         embed.set_thumbnail(url=tracks["thumbnail"])
         return embed
 
-    async def _search(self, ctx: ApplicationContext, keyword: str):
+    async def _search(self, interaction: discord.Interaction, keyword: str):
         options = {
             "extractor_retries": 1,
             "quiet": True,
@@ -88,100 +85,127 @@ class Player(commands.Cog):
                 for entry in data.get("entries", [])
                 if entry.get("ie_key") == "Youtube"
             ]
-            tracks = [Track(d, ctx.author) for d in data]
+            tracks = [Track(d, interaction.user) for d in data]
             return tracks
 
-    @commands.slash_command(description="Play Youtube music")
-    @option("url", description="url")
-    @option(
-        "loop",
-        description="loop",
-        choices=["Off", "One", "Queue"],
-        required=False,
-        default="Off",
+    @app_commands.command(name="play", description="Play Youtube music")
+    @app_commands.describe(
+        url="url",
+        loop="loop",
+        shuffle="shuffle the playlist",
+        top="add to the top of queue",
     )
-    @option("shuffle", type=bool, required=False)
-    @option("top", type=bool, required=False)
+    @app_commands.choices(
+        loop=[
+            app_commands.Choice(name="Off", value="Off"),
+            app_commands.Choice(name="One", value="One"),
+            app_commands.Choice(name="Queue", value="Queue"),
+        ]
+    )
     async def play(
-        self, ctx: ApplicationContext, url: str, loop: str, shuffle: bool, top: bool
+        self,
+        interaction: discord.Interaction,
+        url: str,
+        loop: str = "Off",
+        shuffle: bool = False,
+        top: bool = False,
     ):
-        await ctx.defer()
-        message = await ctx.respond(embed=ProcessingEmbed(self.bot.user))
-        embed = await self._play(ctx, url, loop, shuffle, top)
+        await self.ensure_voice(interaction)
+        await interaction.response.defer()
+        message = await interaction.followup.send(
+            embed=ProcessingEmbed(self.bot.user), wait=True
+        )
+        embed = await self._play(interaction, url, loop, shuffle, top)
         await message.edit(embed=embed)
 
-    @commands.slash_command(description="Set loop")
-    @option(
-        "loop",
-        description="loop",
-        choices=["Off", "One", "Queue"],
-        default="Off",
-        required=True,
+    @app_commands.command(name="loop", description="Set loop")
+    @app_commands.describe(loop="loop mode")
+    @app_commands.choices(
+        loop=[
+            app_commands.Choice(name="Off", value="Off"),
+            app_commands.Choice(name="One", value="One"),
+            app_commands.Choice(name="Queue", value="Queue"),
+        ]
     )
-    async def loop(self, ctx: ApplicationContext, loop: str):
-        subscription = self.subscriptions.get(ctx.guild_id)
+    async def loop_command(self, interaction: discord.Interaction, loop: str = "Off"):
+        await self.ensure_subscription(interaction)
+        subscription = self.subscriptions.get(interaction.guild_id)
         subscription.loop = loop
-        await ctx.respond(
+        await interaction.response.send_message(
             embed=SuccessEmbed(self.bot.user, f"Current loop: **{subscription.loop}**")
         )
 
-    @commands.slash_command(description="Search in Youtube")
-    @option("keyword", description="keyword")
-    async def search(self, ctx: ApplicationContext, keyword: str):
-        await ctx.defer()
-        tracks = await self._search(ctx, keyword)
-        await ctx.respond(
+    @app_commands.command(name="search", description="Search in Youtube")
+    @app_commands.describe(keyword="keyword")
+    async def search(self, interaction: discord.Interaction, keyword: str):
+        await interaction.response.defer()
+        tracks = await self._search(interaction, keyword)
+        await interaction.followup.send(
             embed=SearchEmbed(self.bot.user, keyword, tracks),
-            view=SearchSelectView(self, tracks, ctx),
+            view=SearchSelectView(self, tracks, interaction),
         )
 
-    @commands.slash_command(description="Shuffle")
-    async def shuffle(self, ctx: ApplicationContext, ephemeral: bool = False):
-        subscription = self.subscriptions.get(ctx.guild_id)
+    @app_commands.command(name="shuffle", description="Shuffle")
+    @app_commands.describe(ephemeral="hide response")
+    async def shuffle(
+        self, interaction: discord.Interaction, ephemeral: bool = False
+    ):
+        await self.ensure_subscription(interaction)
+        subscription = self.subscriptions.get(interaction.guild_id)
         random.shuffle(subscription.queue)
-        await ctx.respond(
+        await interaction.response.send_message(
             embed=SuccessEmbed(self.bot.user, "Shuffle complete"), ephemeral=ephemeral
         )
 
-    @commands.slash_command(description="Skip to next song")
-    async def skip(self, ctx: ApplicationContext, ephemeral: bool = False):
-        await ctx.defer()
-        subscription = self.subscriptions.get(ctx.guild_id)
+    @app_commands.command(name="skip", description="Skip to next song")
+    @app_commands.describe(ephemeral="hide response")
+    async def skip(self, interaction: discord.Interaction, ephemeral: bool = False):
+        await self.ensure_subscription(interaction)
+        await interaction.response.defer(ephemeral=ephemeral)
+        subscription = self.subscriptions.get(interaction.guild_id)
         try:
             track = await subscription.skip()
             embed = SuccessEmbed(
                 self.bot.user, f"Skipped to [**{track.title}**]({track.url})"
             )
             embed.set_thumbnail(url=track.thumbnail)
-            await ctx.followup.send(embed=embed, ephemeral=ephemeral)
+            await interaction.followup.send(embed=embed, ephemeral=ephemeral)
         except Empty:
-            await ctx.followup.send(embed=SuccessEmbed(self.bot.user, "No song left"))
+            await interaction.followup.send(
+                embed=SuccessEmbed(self.bot.user, "No song left")
+            )
 
-    @commands.slash_command(description="Leave current channel")
-    async def leave(self, ctx: ApplicationContext):
-        subscription = self.subscriptions.get(ctx.guild_id)
+    @app_commands.command(name="leave", description="Leave current channel")
+    async def leave(self, interaction: discord.Interaction):
+        await self.ensure_subscription(interaction)
+        subscription = self.subscriptions.get(interaction.guild_id)
         await subscription.leave(message=False)
-        await ctx.respond(embed=LeaveEmbed(self.bot.user))
+        await interaction.response.send_message(embed=LeaveEmbed(self.bot.user))
 
-    @commands.slash_command(description="Show the song playing now")
-    @option("realtime", type=bool, required=False)
-    async def nowplaying(self, ctx: ApplicationContext, realtime: bool):
-        await ctx.defer()
-        subscription = self.subscriptions.get(ctx.guild_id)
+    @app_commands.command(name="nowplaying", description="Show the song playing now")
+    @app_commands.describe(realtime="enable realtime updates")
+    async def nowplaying(
+        self, interaction: discord.Interaction, realtime: bool = False
+    ):
+        await interaction.response.defer()
+        subscription = self.subscriptions.get(interaction.guild_id)
         if not subscription:
-            await ctx.respond(embed=ErrorEmbed(self.bot.user, "Not playing now."))
+            await interaction.followup.send(
+                embed=ErrorEmbed(self.bot.user, "Not playing now.")
+            )
             return
         if subscription and not subscription.checkLock:
             if realtime:
-                message = await ctx.respond(
+                message = await interaction.followup.send(
                     embed=NowPlayingEmbed(
                         track=subscription.nowPlaying, queue=subscription.queue
                     ),
                     view=NowPlayingView(self),
+                    wait=True,
                 )
-                self.updateNowPlaying.start(ctx.guild_id, message.id)
+                self.updateNowPlaying.start(interaction.guild_id, message.id)
             else:
-                await ctx.respond(
+                await interaction.followup.send(
                     embed=NowPlayingEmbed(
                         track=subscription.nowPlaying, queue=subscription.queue
                     ),
@@ -201,19 +225,15 @@ class Player(commands.Cog):
                     )
                 )
 
-    @play.before_invoke
-    async def ensure_voice(self, ctx: ApplicationContext):
-        if ctx.voice_client is None:
-            if not ctx.author.voice:
+    async def ensure_voice(self, interaction: discord.Interaction):
+        voice_client = interaction.guild.voice_client if interaction.guild else None
+        if voice_client is None:
+            if not interaction.user.voice:
                 raise commands.CommandError("You are not connected to a voice channel.")
 
-    @loop.before_invoke
-    @skip.before_invoke
-    @leave.before_invoke
-    @shuffle.before_invoke
-    async def ensure_subscription(self, ctx: ApplicationContext):
-        await self.ensure_voice(ctx)
-        subscription = self.subscriptions.get(ctx.guild_id)
+    async def ensure_subscription(self, interaction: discord.Interaction):
+        await self.ensure_voice(interaction)
+        subscription = self.subscriptions.get(interaction.guild_id)
         if not subscription:
             raise commands.CommandError("You are not playing in this guild.")
 
@@ -264,45 +284,44 @@ class SearchSelectView(discord.ui.View):
         self,
         player: Player,
         tracks: List[Track],
-        ctx: ApplicationContext,
+        interaction: discord.Interaction,
         *,
         timeout=60,
     ):
         super().__init__(timeout=timeout)
-        self.add_item(SearchSelect(player, tracks, ctx))
-        self.add_item(SearchButton(player, tracks, ctx, label="Search", emoji="🔎"))
+        self.add_item(SearchSelect(player, tracks, interaction))
+        self.add_item(SearchButton(player, tracks, interaction, label="Search", emoji="🔎"))
         self.add_item(ToggleButton(emoji="🔝", custom_id="Top"))
 
 
 class SearchModal(discord.ui.Modal):
     def __init__(
-        self, player: Player, tracks: List[Track], ctx: ApplicationContext
+        self, player: Player, tracks: List[Track], interaction: discord.Interaction
     ) -> None:
         super().__init__(title="Search Model")
-        self.add_item(discord.ui.InputText(label="Keyword"))
+        self.add_item(discord.ui.TextInput(label="Keyword"))
         self.player = player
         self.tracks = tracks
-        self.ctx = ctx
+        self.original_interaction = interaction
 
-    async def callback(self, interaction: discord.Interaction):
-        _ctx = ApplicationContext(self.player.bot, interaction)
+    async def on_submit(self, interaction: discord.Interaction):
         keyword = self.children[0].value
-        await interaction.message.edit(
+        await interaction.response.edit_message(
             embed=InfoEmbed(self.player.bot.user, "Processing"),
         )
-        tracks = await self.player._search(_ctx, keyword)
+        tracks = await self.player._search(interaction, keyword)
         await interaction.message.edit(
             embed=SearchEmbed(self.player.bot.user, keyword, tracks),
-            view=SearchSelectView(self.player, tracks, _ctx),
+            view=SearchSelectView(self.player, tracks, interaction),
         )
-        await interaction.response.send_message(
+        await interaction.followup.send(
             embed=SuccessEmbed(self.player.bot.user, f'Searched for "{keyword}"'),
             ephemeral=True,
         )
 
 
 class SearchSelect(discord.ui.Select):
-    def __init__(self, player: Player, tracks: List[Track], ctx: ApplicationContext):
+    def __init__(self, player: Player, tracks: List[Track], interaction: discord.Interaction):
         options = [
             discord.SelectOption(
                 label=track.title,
@@ -317,10 +336,9 @@ class SearchSelect(discord.ui.Select):
         )
         self.player = player
         self.tracks = tracks
-        self.ctx = ctx
+        self.original_interaction = interaction
 
     async def callback(self, interaction: discord.Interaction):
-        _ctx = ApplicationContext(self.player.bot, interaction)
         top = (
             True
             if self.view.get_item("Top").style == discord.ButtonStyle.success
@@ -328,10 +346,13 @@ class SearchSelect(discord.ui.Select):
         )
         self.view.clear_items()
         await interaction.message.edit(view=self.view)
-        message = await interaction.respond(embed=ProcessingEmbed(self.player.bot.user))
+        await interaction.response.defer()
+        message = await interaction.followup.send(
+            embed=ProcessingEmbed(self.player.bot.user), wait=True
+        )
 
-        await self.player.ensure_voice(_ctx)
-        embed = await self.player._play(_ctx, self.values[0], "Off", False, top)
+        await self.player.ensure_voice(interaction)
+        embed = await self.player._play(interaction, self.values[0], "Off", False, top)
         await message.edit(embed=embed)
 
 
@@ -340,7 +361,7 @@ class SearchButton(discord.ui.Button):
         self,
         player: Player,
         tracks: List[Track],
-        ctx: ApplicationContext,
+        interaction: discord.Interaction,
         *,
         style=discord.ButtonStyle.primary,
         label=None,
@@ -349,11 +370,11 @@ class SearchButton(discord.ui.Button):
         super().__init__(style=style, label=label, emoji=emoji)
         self.player = player
         self.tracks = tracks
-        self.ctx = ctx
+        self.original_interaction = interaction
 
     async def callback(self, interaction: discord.Interaction):
         await interaction.response.send_modal(
-            SearchModal(self.player, self.tracks, self.ctx)
+            SearchModal(self.player, self.tracks, interaction)
         )
 
 
@@ -391,9 +412,8 @@ class NowPlayingView(discord.ui.View):
     @discord.ui.button(
         label="Skip", custom_id="skip", style=discord.ButtonStyle.primary, emoji="⏩"
     )
-    async def skip(self, button: discord.Button, interaction: discord.Interaction):
-        ctx = ApplicationContext(self.player.bot, interaction)
-        await self.player.skip(ctx, True)
+    async def skip(self, button: discord.ui.Button, interaction: discord.Interaction):
+        await self.player.skip(interaction, True)
 
     @discord.ui.button(
         label="Shuffle",
@@ -401,9 +421,8 @@ class NowPlayingView(discord.ui.View):
         style=discord.ButtonStyle.primary,
         emoji="🔀",
     )
-    async def shuffle(self, button: discord.Button, interaction: discord.Interaction):
-        ctx = ApplicationContext(self.player.bot, interaction)
-        await self.player.shuffle(ctx, True)
+    async def shuffle(self, button: discord.ui.Button, interaction: discord.Interaction):
+        await self.player.shuffle(interaction, True)
 
     @discord.ui.button(
         label="Stop Sync",
@@ -411,7 +430,7 @@ class NowPlayingView(discord.ui.View):
         style=discord.ButtonStyle.primary,
         emoji="♾️",
     )
-    async def stopSync(self, button: discord.Button, interaction: discord.Interaction):
+    async def stopSync(self, button: discord.ui.Button, interaction: discord.Interaction):
         self.player.updateNowPlaying.cancel()
         self.disable_all_items()
-        await interaction.message.edit(view=self)
+        await interaction.response.edit_message(view=self)

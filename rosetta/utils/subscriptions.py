@@ -2,8 +2,9 @@ import asyncio
 import logging
 from queue import Empty
 
-from discord import Bot, VoiceClient
+from discord import VoiceClient
 from discord.channel import TextChannel
+from discord.ext import commands
 
 from .embeds import LeaveEmbed
 from .track import Track
@@ -12,7 +13,7 @@ from .track import Track
 class Queue:
     def __init__(
         self,
-        bot: Bot,
+        bot: commands.Bot,
         guildId: str,
         voiceClient: VoiceClient,
         messageChannel: TextChannel,
@@ -93,7 +94,7 @@ class Subscription:
 
     def createQueue(
         self,
-        bot: Bot,
+        bot: commands.Bot,
         guildId: str,
         channel: TextChannel,
         voiceClient: VoiceClient,

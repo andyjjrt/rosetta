@@ -16,7 +16,7 @@ intents = discord.Intents.default()
 intents.guilds = True
 intents.voice_states = True
 
-bot = discord.Bot(intents=intents)
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 
 @bot.event
@@ -24,32 +24,42 @@ async def on_ready():
     logger.info(f"We have logged in as {bot.user}")
     status = discord.Activity(type=discord.ActivityType.listening, name="/play")
     await bot.change_presence(status=discord.Status.online, activity=status)
+    try:
+        synced = await bot.tree.sync()
+        logger.info(f"Synced {len(synced)} command(s)")
+    except Exception as e:
+        logger.error(f"Failed to sync commands: {e}")
 
 
-@bot.event
-async def on_application_command_error(
-    ctx: discord.ApplicationContext, error: discord.DiscordException
+@bot.tree.error
+async def on_app_command_error(
+    interaction: discord.Interaction, error: discord.app_commands.AppCommandError
 ):
     logger.error(error)
-    if isinstance(error, commands.CommandError):
-        await ctx.respond(embed=ErrorEmbed(bot.user, f"[Command] {error}"))
+    if isinstance(error, discord.app_commands.CommandInvokeError):
+        original_error = error.original
+        if isinstance(original_error, commands.CommandError):
+            await interaction.response.send_message(
+                embed=ErrorEmbed(bot.user, f"[Command] {original_error}"), ephemeral=True
+            )
+        else:
+            await interaction.response.send_message(
+                embed=ErrorEmbed(bot.user, f"[Error] {original_error}"), ephemeral=True
+            )
     else:
-        await ctx.respond(embed=ErrorEmbed(bot.user, f"[Unknown] {error}"))
+        await interaction.response.send_message(
+            embed=ErrorEmbed(bot.user, f"[Unknown] {error}"), ephemeral=True
+        )
 
 
-@bot.event
-async def on_application_command(ctx: discord.ApplicationContext):
-    # logger.info(f"{ctx.author} uses {ctx.interaction.data} {ctx.channel} {ctx.guild}")
-    logger.info(
-        f"[{ctx.channel}] {ctx.author} uses /{ctx.command}", extra={"markup": False}
-    )
+async def setup_hook():
+    await bot.add_cog(Basics(bot))
+    await bot.add_cog(Player(bot))
+    await bot.add_cog(Mygo(bot))
+    await bot.add_cog(LLM(bot))
 
 
-bot.add_cog(Basics(bot))
-bot.add_cog(Player(bot))
-bot.add_cog(Mygo(bot))
-bot.add_cog(LLM(bot))
-
+bot.setup_hook = setup_hook
 
 logger.info("Starting the application...")
 bot.run(TOKEN)
