@@ -299,7 +299,9 @@ class SearchModal(discord.ui.Modal):
         self, player: Player, tracks: List[Track], interaction: discord.Interaction
     ) -> None:
         super().__init__(title="Search Model")
-        self.add_item(discord.ui.TextInput(label="Keyword"))
+        self.add_item(
+            discord.ui.TextInput(label="Keyword", placeholder="Enter search keyword")
+        )
         self.player = player
         self.tracks = tracks
         self.original_interaction = interaction
