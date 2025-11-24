@@ -44,9 +44,9 @@ class Player(commands.Cog):
         if ctx.voice_client is None:
             await ctx.author.voice.channel.connect()
             # Insure deafen
-            await ctx.author.voice.channel.guild.change_voice_state(
-                channel=ctx.author.voice.channel, self_deaf=True
-            )
+            # await ctx.author.voice.channel.guild.change_voice_state(
+            #     channel=ctx.author.voice.channel, self_deaf=True
+            # )
 
         if shuffle:
             random.shuffle(tracks["tracks"])
