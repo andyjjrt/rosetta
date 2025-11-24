@@ -64,12 +64,16 @@ class Queue:
                 self.queue.append(self.nowPlaying)
             track = self.queue.pop(0)
             self.nowPlaying = track
-
-        player = await self.nowPlaying.createAudio()
-        self.voiceClient.play(
-            player,
-            after=lambda e: self.logger.error(f"Player error: {e}") if e else None,
-        )
+        try:
+            player = await self.nowPlaying.createAudio()
+            self.voiceClient.play(
+                player,
+                after=lambda e: self.logger.error(f"Player error: {e}") if e else None,
+            )
+        except Exception as e:
+            logging.error(e)
+            self.voiceClient.stop()
+            await self._process()
         self.checkLock = False
 
     async def _startSession(self):
@@ -80,9 +84,6 @@ class Queue:
                     await self._process()
                 except Empty:
                     await self.leave()
-                except BaseException as e:
-                    print(e)
-                    await self.skip()
             await asyncio.sleep(1)
 
 

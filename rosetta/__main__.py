@@ -43,21 +43,28 @@ async def on_app_command_error(
     interaction: discord.Interaction, error: discord.app_commands.AppCommandError
 ):
     logger.error(error)
+    
+    # Determine the error message
     if isinstance(error, discord.app_commands.CommandInvokeError):
         original_error = error.original
         if isinstance(original_error, commands.CommandError):
-            await interaction.response.send_message(
-                embed=ErrorEmbed(bot.user, f"[Command] {original_error}"),
-                ephemeral=True,
-            )
+            error_embed = ErrorEmbed(bot.user, f"[Command] {original_error}")
         else:
-            await interaction.response.send_message(
-                embed=ErrorEmbed(bot.user, f"[Error] {original_error}"), ephemeral=True
-            )
+            error_embed = ErrorEmbed(bot.user, f"[Error] {original_error}")
     else:
-        await interaction.response.send_message(
-            embed=ErrorEmbed(bot.user, f"[Unknown] {error}"), ephemeral=True
-        )
+        error_embed = ErrorEmbed(bot.user, f"[Unknown] {error}")
+    
+    # Send the error message using the appropriate method
+    try:
+        if interaction.response.is_done():
+            # Interaction already responded to, use followup
+            await interaction.followup.send(embed=error_embed, ephemeral=True)
+        else:
+            # Interaction not yet responded to, use response
+            await interaction.response.send_message(embed=error_embed, ephemeral=True)
+    except discord.errors.InteractionResponded:
+        # Fallback in case the check above didn't catch it
+        await interaction.followup.send(embed=error_embed, ephemeral=True)
 
 
 async def setup_hook():
