@@ -4,6 +4,7 @@ music/
 mygo-ave-video/
 .data/
 config.ini
+*.egg-info/
 
 # Logs
 logs
