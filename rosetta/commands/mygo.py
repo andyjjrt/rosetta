@@ -4,31 +4,33 @@ import json
 import os
 import re
 import subprocess
+from typing import List
 
 import discord
 import ffmpeg
-from discord import ApplicationContext, Bot, option
+from discord import app_commands
 from discord.ext import commands
 
 
 class Mygo(commands.Cog):
-    __cog_name__ = "Mygo"
-
     FOLDER = "mygo-ave-video"
     data = []
 
-    def __init__(self, bot: Bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
         with open(os.path.join(self.FOLDER, "data.json")) as f:
             Mygo.data = json.load(f)
 
-    @staticmethod
-    def get_text(self: discord.AutocompleteContext):
-        text = self.options["text"]
+    async def text_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> List[app_commands.Choice[str]]:
         return [
-            f"[{d['segment_id']}] {d['text']} ({d['episode']})"
+            app_commands.Choice(
+                name=f"[{d['segment_id']}] {d['text']} ({d['episode']})",
+                value=f"[{d['segment_id']}] {d['text']}",
+            )
             for d in Mygo.data
-            if text in d["text"]
+            if current in d["text"]
         ][:25]
 
     async def generate_gif(self, segment_data, resolution):
@@ -79,28 +81,28 @@ class Mygo(commands.Cog):
 
         return gif_buffer
 
-    @commands.slash_command(
-        name="mygo",
-        integration_types=set(
-            [
-                discord.IntegrationType.user_install,
-                discord.IntegrationType.guild_install,
-            ]
-        ),
+    @app_commands.command(name="mygo", description="Generate MyGO GIF from anime")
+    @app_commands.describe(
+        text="Select a scene",
+        resolution="Output resolution",
+        ephemeral="Hide response",
     )
-    @option(
-        "text",
-        type=discord.SlashCommandOptionType.string,
-        autocomplete=get_text,
+    @app_commands.autocomplete(text=text_autocomplete)
+    @app_commands.choices(
+        resolution=[
+            app_commands.Choice(name="240p", value=240),
+            app_commands.Choice(name="360p", value=360),
+            app_commands.Choice(name="720p", value=720),
+        ]
     )
-    @option(
-        "resolution", type=int, choices=[240, 360, 720], default=240, required=False
-    )
-    @option("ephemeral", type=bool, default=False, required=False)
     async def mygo(
-        self, ctx: ApplicationContext, text: str, resolution: int, ephemeral: bool
+        self,
+        interaction: discord.Interaction,
+        text: str,
+        resolution: int = 240,
+        ephemeral: bool = False,
     ):
-        await ctx.defer(ephemeral=ephemeral)
+        await interaction.response.defer(ephemeral=ephemeral)
         match = re.match(r"\[([^\]]+)\] (.+)", text)
         if match:
             segment_id = match.group(1)
@@ -113,4 +115,4 @@ class Mygo(commands.Cog):
 
         # Send the GIF
         file = discord.File(gif_buffer, filename=f"{result['text']}.gif")
-        await ctx.respond(file=file, ephemeral=ephemeral)
+        await interaction.followup.send(file=file, ephemeral=ephemeral)
