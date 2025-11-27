@@ -2,6 +2,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: rosetta-statefulset
+  namespace: rosetta
 spec:
   serviceName: "rosetta"
   replicas: 1
