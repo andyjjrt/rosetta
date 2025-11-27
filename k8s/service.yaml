@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rosetta-service
+spec:
+  clusterIP: None
+  selector:
+    app: rosetta
