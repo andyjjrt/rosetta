@@ -24,6 +24,37 @@ spec:
                   fieldPath: metadata.name  # StatefulSet pods have predictable names
             - name: TOTAL_SHARDS
               value: "1"
+            # Bot config
+            - name: BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: rosetta-secret
+                  key: discord-client-secret
+            - name: BOT_CLIENT_ID
+              value: "1091392369296937073"
+            # Langfuse config
+            - name: LANGFUSE_PUBLIC_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: rosetta-secret
+                  key: langfuse-public-key
+            - name: LANGFUSE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: rosetta-secret
+                  key: langfuse-secret-key
+            - name: LANGFUSE_HOST
+              value: "https://langfuse.andyjjrt.cc"
+            # LLM config
+            - name: LLM_BASE_URL
+              value: "https://llm.andyjjrt.cc"
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: rosetta-secret
+                  key: llm-api-key
+            - name: LLM_DEFAULT_MODEL
+              value: "Qwen3-4B-Instruct-2507.Eagle3"
           resources:
             requests:
               cpu: "500m"       # 0.5 CPU guaranteed

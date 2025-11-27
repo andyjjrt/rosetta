@@ -3,21 +3,8 @@ kind: ConfigMap
 metadata:
   name: rosetta-config
   namespace: rosetta
-  annotations:
-    avp.kubernetes.io/secret: "rosetta:rosetta-secret"
 data:
   config.ini: |
-    [bot]
-    TOKEN=<{{ .discord-client-secret }}>
-    CLIENT_ID=1091392369296937073
-    [langfuse]
-    PUBLIC_KEY=<{{ .langfuse-public-key }}>
-    SECRET_KEY=<{{ .langfuse-secret-key }}>
-    HOST=https://langfuse.andyjjrt.cc
-    [llm]
-    BASE_URL=https://llm.andyjjrt.cc
-    API_KEY=<{{ .llm-api-key }}>
-    DEFAULT_MODEL=Qwen3-4B-Instruct-2507.Eagle3
     [bot.emoji]
     success=<a:success:1349071419581005897>
     error=<a:error:1349071449633329352>
