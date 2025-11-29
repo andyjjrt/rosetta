@@ -15,7 +15,7 @@ spec:
     spec:
       containers:
         - name: rosetta
-          image: ghcr.io/andyjjrt/rosetta:0.9.0-beta2
+          image: ghcr.io/andyjjrt/rosetta:0.9.0-beta3
           env:
             - name: SHARD_ID
               valueFrom:
