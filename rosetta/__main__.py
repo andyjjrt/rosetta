@@ -7,7 +7,7 @@ from discord.ext import commands
 
 from .commands import LLM, Basics, Mygo, Player
 from .utils import setup_logging
-from .utils.config import TOKEN
+from .utils.config import EMOJI, TOKEN
 from .utils.embeds import ErrorEmbed
 
 setup_logging(Path(__file__).resolve().parent / "logging.yaml")
@@ -29,6 +29,16 @@ bot = commands.Bot(
 @bot.event
 async def on_ready():
     logger.info(f"We have logged in as {bot.user}")
+    
+    # Fetch and store application emojis
+    try:
+        app_emojis = await bot.fetch_application_emojis()
+        emoji_dict = {emoji.name: str(emoji) for emoji in app_emojis}
+        EMOJI.set_emojis(emoji_dict)
+        logger.info(f"Loaded {len(emoji_dict)} application emoji(s)")
+    except Exception as e:
+        logger.error(f"Failed to fetch application emojis: {e}")
+    
     status = discord.Activity(type=discord.ActivityType.listening, name="/play")
     await bot.change_presence(status=discord.Status.online, activity=status)
     try:

@@ -1,14 +1,11 @@
-import configparser
 from datetime import datetime
 from typing import List
 
 from discord import Colour, Embed, User
 from openai.types.completion_usage import CompletionUsage
 
+from .config import EMOJI
 from .track import Track
-
-config = configparser.ConfigParser()
-config.read("config.ini")
 
 
 def PingEmbed(user: User, latency: float):
@@ -24,7 +21,7 @@ def PingEmbed(user: User, latency: float):
 
 def SuccessEmbed(user: User, message: str):
     embed = Embed(
-        title=f"{config['bot.emoji']['success']} Success",
+        title=f"{EMOJI.get('success')} Success",
         description=message,
         colour=Colour.green(),
         timestamp=datetime.now(),
@@ -35,7 +32,7 @@ def SuccessEmbed(user: User, message: str):
 
 def ErrorEmbed(user: User, error: str):
     embed = Embed(
-        title=f"{config['bot.emoji']['error']} Error",
+        title=f"{EMOJI.get('error')} Error",
         description=error,
         colour=Colour.red(),
         timestamp=datetime.now(),
@@ -57,7 +54,7 @@ def InfoEmbed(user: User, message: str):
 
 def NowPlayingEmbed(track: Track, queue: List[Track]):
     embed = Embed(
-        title=f"{config['bot.emoji']['youtube']} Now Playing",
+        title=f"{EMOJI.get('youtube')} Now Playing",
         description=f"[**{track.title}**]({track.url})\n\n`{track.time[0]}`{track.progress}`{track.time[1]}`\n",
         colour=Colour.green(),
         timestamp=datetime.now(),

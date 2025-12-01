@@ -1,12 +1,24 @@
-import configparser
 import os
 
-config = configparser.ConfigParser()
-config.read("config.ini")
-
 # Bot config - prefer environment variables, fallback to config.ini
-TOKEN = os.environ.get("BOT_TOKEN") or config.get("bot", "TOKEN", fallback=None)
-CLIENT_ID = os.environ.get("BOT_CLIENT_ID") or config.get("bot", "CLIENT_ID", fallback=None)
+TOKEN = os.environ.get("BOT_TOKEN")
+CLIENT_ID = os.environ.get("BOT_CLIENT_ID")
+
+
+# Emoji config - fetched from application emojis at startup
+class EmojiConfig:
+    _emojis: dict[str, str] = {}
+
+    @classmethod
+    def set_emojis(cls, emojis: dict[str, str]):
+        cls._emojis = emojis
+
+    @classmethod
+    def get(cls, key: str) -> str:
+        return cls._emojis.get(key, "")
+
+
+EMOJI = EmojiConfig()
 
 
 # LLM config - prefer environment variables, fallback to config.ini
@@ -21,17 +33,7 @@ class LLMConfig:
         env_key = env_map.get(key)
         if env_key and os.environ.get(env_key):
             return os.environ.get(env_key)
-        if config.has_section("llm"):
-            return config.get("llm", key, fallback=None)
         return None
 
 
 LLM = LLMConfig()
-
-# Langfuse config - prefer environment variables, fallback to config.ini
-if os.environ.get("LANGFUSE_PUBLIC_KEY"):
-    pass  # Already set in environment
-elif config.has_section("langfuse"):
-    os.environ.setdefault("LANGFUSE_PUBLIC_KEY", config["langfuse"].get("PUBLIC_KEY"))
-    os.environ.setdefault("LANGFUSE_SECRET_KEY", config["langfuse"].get("SECRET_KEY"))
-    os.environ.setdefault("LANGFUSE_HOST", config["langfuse"].get("HOST"))

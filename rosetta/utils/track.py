@@ -1,5 +1,4 @@
 import asyncio
-import configparser
 import math
 import os
 
@@ -7,8 +6,7 @@ import ffmpeg
 import yt_dlp
 from discord import FFmpegOpusAudio, Member, User
 
-config = configparser.ConfigParser()
-config.read("config.ini")
+from .config import EMOJI
 
 ytdl_format_options = {
     "format": "ba[ext=m4a]",
@@ -119,33 +117,31 @@ class Track:
         # [========]
         if progress == 0:
             return (
-                config["bot.emoji"]["progress_start_0"]
-                + config["bot.emoji"]["progress"] * 8
-                + config["bot.emoji"]["progress_end"]
+                EMOJI.get("progress_start_0")
+                + EMOJI.get("progress") * 8
+                + EMOJI.get("progress_end")
             )
         elif progress == 1:
             return (
-                config["bot.emoji"]["progress_start"]
-                + config["bot.emoji"]["progress_mix"]
-                + config["bot.emoji"]["progress"] * 7
-                + config["bot.emoji"]["progress_end"]
+                EMOJI.get("progress_start")
+                + EMOJI.get("progress_mix")
+                + EMOJI.get("progress") * 7
+                + EMOJI.get("progress_end")
             )
         elif progress >= 10:
             return (
-                config["bot.emoji"]["progress_start"]
-                + config["bot.emoji"]["progress_fill"] * 8
-                + config["bot.emoji"]["progress_fill_end"]
+                EMOJI.get("progress_start")
+                + EMOJI.get("progress_fill") * 8
+                + EMOJI.get("progress_fill_end")
             )
         else:
             return (
-                config["bot.emoji"]["progress_start"]
-                + config["bot.emoji"]["progress_fill"] * (progress - 1)
-                + config["bot.emoji"]["progress_mix"]
-                + config["bot.emoji"]["progress"] * (8 - progress)
-                + config["bot.emoji"]["progress_end"]
+                EMOJI.get("progress_start")
+                + EMOJI.get("progress_fill") * (progress - 1)
+                + EMOJI.get("progress_mix")
+                + EMOJI.get("progress") * (8 - progress)
+                + EMOJI.get("progress_end")
             )
-
-        # 10 slices,
 
     @classmethod
     async def from_url(cls, url: str, user: Member | User, *, loop=None):

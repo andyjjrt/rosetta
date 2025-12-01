@@ -64,9 +64,6 @@ spec:
           volumeMounts:
             - name: music
               mountPath: /app/music
-            - name: config
-              mountPath: /app/config.ini
-              subPath: config.ini
             - name: mygo-ave-video
               mountPath: /app/mygo-ave-video
               readOnly: true
@@ -74,12 +71,6 @@ spec:
         - name: music
           persistentVolumeClaim:
             claimName: rosetta-music-pvc
-        - name: config
-          configMap:
-            name: rosetta-config
-            items:
-              - key: config.ini
-                path: config.ini
         - name: mygo-ave-video
           persistentVolumeClaim:
             claimName: rosetta-video-pvc
