@@ -5,7 +5,7 @@ from pathlib import Path
 import discord
 from discord.ext import commands
 
-from .commands import LLM, Basics, Mygo, Player
+from .commands import LLM, Basics, Mygo, Music
 from .utils import setup_logging
 from .utils.config import EMOJI, TOKEN
 from .utils.embeds import ErrorEmbed
@@ -79,7 +79,7 @@ async def on_app_command_error(
 
 async def setup_hook():
     await bot.add_cog(Basics(bot))
-    await bot.add_cog(Player(bot))
+    await bot.add_cog(Music(bot))
     await bot.add_cog(Mygo(bot))
     await bot.add_cog(LLM(bot))
 

@@ -3,9 +3,9 @@ from typing import List
 
 from discord import Colour, Embed, User
 from openai.types.completion_usage import CompletionUsage
+import pomice
 
 from .config import EMOJI
-from .track import Track
 
 
 def PingEmbed(user: User, latency: float):
@@ -52,21 +52,21 @@ def InfoEmbed(user: User, message: str):
     return embed
 
 
-def NowPlayingEmbed(track: Track, queue: List[Track]):
+def NowPlayingEmbed(track: pomice.Track, queue: pomice.Queue):
     embed = Embed(
         title=f"{EMOJI.get('youtube')} Now Playing",
-        description=f"[**{track.title}**]({track.url})\n\n`{track.time[0]}`{track.progress}`{track.time[1]}`\n",
+        description=f"[**{track.title}**]({track.uri})\n\n`{track.position}`/`{track.length}`\n",
         colour=Colour.green(),
         timestamp=datetime.now(),
     )
     embed.set_thumbnail(url=track.thumbnail)
-    if len(queue) > 0:
+    if not queue.is_empty:
         embed.add_field(
-            name=f"💭 Next ({len(queue)} left)",
-            value=f"{'\n'.join([f'- [{t.title}]({t.url}) `{t.time[1]}`' for t in queue[:3]])}",
+            name=f"💭 Next ({queue.size} left)",
+            value=f"{'\n'.join([f'- [{t.title}]({t.uri}) `{t.length}`' for t in queue.get_queue()[:3]])}",
             inline=False
         )
-    embed.set_footer(text=track.author.name, icon_url=track.author.avatar)
+    # embed.set_footer(text=track.requester.name, icon_url=track.requester.avatar)
     return embed
 
 
@@ -81,12 +81,14 @@ def LeaveEmbed(user: User):
     return embed
 
 
-def SearchEmbed(user: User, keyword: str, tracks: List[Track]):
+def SearchEmbed(user: User, keyword: str, tracks: List[pomice.Track] | pomice.Playlist):
+    if isinstance(tracks, pomice.Playlist):
+        tracks = tracks.tracks
     embed = Embed(
         title=f':mag: Search result of **"{keyword}"**',
         description="\n".join(
             [
-                f"{i + 1}. [**{track.title}**]({track.url})"
+                f"{i + 1}. [**{track.title}**]({track.uri})"
                 for i, track in enumerate(tracks)
             ]
         ),

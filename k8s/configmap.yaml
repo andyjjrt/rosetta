@@ -1,8 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: rosetta-config
-data:
-  config.ini: |
-    ; Emoji is now fetched from application emojis automatically
-    ; No additional config needed here
