@@ -1,6 +1,7 @@
+from .admin import Admin
 from .basics import Basics
 from .llm import LLM
-from .mygo import Mygo
 from .music import Music
+from .mygo import Mygo
 
-__all__ = ["Basics", "LLM", "Mygo", "Music"]
+__all__ = ["Admin", "Basics", "LLM", "Mygo", "Music"]

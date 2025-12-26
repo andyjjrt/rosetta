@@ -1,39 +1,57 @@
-import os
+from pydantic_settings import BaseSettings
+
 
 # Bot config - prefer environment variables, fallback to config.ini
-TOKEN = os.environ.get("BOT_TOKEN")
-CLIENT_ID = os.environ.get("BOT_CLIENT_ID")
+class BotSetting(BaseSettings):
+    TOKEN: str | None = None
+    CLIENT_ID: str | None = None
+
+    class Config:
+        env_prefix = "BOT_"
 
 
 # Emoji config - fetched from application emojis at startup
-class EmojiConfig:
-    _emojis: dict[str, str] = {}
+class EmojiSetting(BaseSettings):
+    model_config = {"extra": "allow"}
 
-    @classmethod
-    def set_emojis(cls, emojis: dict[str, str]):
-        cls._emojis = emojis
+    def set_emojis(self, emojis: dict[str, str]):
+        for key, value in emojis.items():
+            object.__setattr__(self, key, value)
 
-    @classmethod
-    def get(cls, key: str) -> str:
-        return cls._emojis.get(key, "")
-
-
-EMOJI = EmojiConfig()
+    def get(self, key: str) -> str:
+        return getattr(self, key, "")
 
 
-# LLM config - prefer environment variables, fallback to config.ini
-class LLMConfig:
-    @staticmethod
-    def get(key: str) -> str | None:
-        env_map = {
-            "BASE_URL": "LLM_BASE_URL",
-            "API_KEY": "LLM_API_KEY",
-            "DEFAULT_MODEL": "LLM_DEFAULT_MODEL",
-        }
-        env_key = env_map.get(key)
-        if env_key and os.environ.get(env_key):
-            return os.environ.get(env_key)
-        return None
+# LLM config - prefer environment variables
+class LLMSetting(BaseSettings):
+    BASE_URL: str | None = None
+    API_KEY: str | None = None
+    DEFAULT_MODEL: str | None = None
+
+    class Config:
+        env_prefix = "LLM_"
 
 
-LLM = LLMConfig()
+# Lavalink config - prefer environment variables
+class LavalinkSetting(BaseSettings):
+    # Set to "k8s" to enable Kubernetes service discovery, "local" for local development
+    DISCOVERY_MODE: str = "local"
+
+    # Local development settings
+    HOST: str = "127.0.0.1"
+    PORT: int = 2333
+    PASSWORD: str = "youshallnotpass"
+
+    # Kubernetes discovery settings
+    K8S_NAMESPACE: str = "default"
+    K8S_SERVICE_NAME: str = "lavalink"
+    K8S_SERVICE_PORT: int = 2333
+
+    class Config:
+        env_prefix = "LAVALINK_"
+
+
+BotConfig = BotSetting()
+EmojiConfig = EmojiSetting()
+LLMConfig = LLMSetting()
+LavalinkConfig = LavalinkSetting()

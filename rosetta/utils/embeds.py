@@ -1,11 +1,13 @@
+import math
 from datetime import datetime
 from typing import List
 
+import pomice
 from discord import Colour, Embed, User
 from openai.types.completion_usage import CompletionUsage
-import pomice
 
-from .config import EMOJI
+from .config import EmojiConfig
+from .player import CustomPlayer
 
 
 def PingEmbed(user: User, latency: float):
@@ -21,7 +23,7 @@ def PingEmbed(user: User, latency: float):
 
 def SuccessEmbed(user: User, message: str):
     embed = Embed(
-        title=f"{EMOJI.get('success')} Success",
+        title=f"{EmojiConfig.get('success')} Success",
         description=message,
         colour=Colour.green(),
         timestamp=datetime.now(),
@@ -32,7 +34,7 @@ def SuccessEmbed(user: User, message: str):
 
 def ErrorEmbed(user: User, error: str):
     embed = Embed(
-        title=f"{EMOJI.get('error')} Error",
+        title=f"{EmojiConfig.get('error')} Error",
         description=error,
         colour=Colour.red(),
         timestamp=datetime.now(),
@@ -52,19 +54,85 @@ def InfoEmbed(user: User, message: str):
     return embed
 
 
-def NowPlayingEmbed(track: pomice.Track, queue: pomice.Queue):
+def _format_time(milliseconds: int) -> str:
+    seconds = int(milliseconds / 1000)
+    minutes = seconds // 60
+    seconds = seconds % 60
+    return f"{minutes:02d}:{seconds:02d}"
+
+
+def _get_time_display(position_ms: int, duration_ms: int) -> tuple[str, str]:
+    """Convert milliseconds to formatted time strings (mm:ss)"""
+    currentMinute = int(position_ms / 60000)
+    currentSecond = int(position_ms / 1000) % 60
+    durationMinute = int(duration_ms / 60000)
+    durationSecond = int(duration_ms / 1000) % 60
+
+    times = (currentMinute, currentSecond, durationMinute, durationSecond)
+    timesWithZeros = [f"0{t}" if t < 10 else t for t in times]
+
+    return (
+        f"{timesWithZeros[0]}:{timesWithZeros[1]}",
+        f"{timesWithZeros[2]}:{timesWithZeros[3]}",
+    )
+
+
+def _get_progress_bar(position_ms: int, duration_ms: int) -> str:
+    """Generate a progress bar based on current position and duration"""
+    if duration_ms == 0:
+        return ""
+
+    progress = math.floor(position_ms * 10 / duration_ms)
+
+    # [========]
+    if progress == 0:
+        return (
+            EmojiConfig.get("progress_start_0")
+            + EmojiConfig.get("progress") * 8
+            + EmojiConfig.get("progress_end")
+        )
+    elif progress == 1:
+        return (
+            EmojiConfig.get("progress_start")
+            + EmojiConfig.get("progress_mix")
+            + EmojiConfig.get("progress") * 7
+            + EmojiConfig.get("progress_end")
+        )
+    elif progress >= 10:
+        return (
+            EmojiConfig.get("progress_start")
+            + EmojiConfig.get("progress_fill") * 8
+            + EmojiConfig.get("progress_fill_end")
+        )
+    else:
+        return (
+            EmojiConfig.get("progress_start")
+            + EmojiConfig.get("progress_fill") * (progress - 1)
+            + EmojiConfig.get("progress_mix")
+            + EmojiConfig.get("progress") * (8 - progress)
+            + EmojiConfig.get("progress_end")
+        )
+
+
+def NowPlayingEmbed(player: CustomPlayer):
+    track = player.current
+    queue = player.queue
+
+    current_time, duration_time = _get_time_display(player.position, track.length)
+    progress_bar = _get_progress_bar(player.position, track.length)
+
     embed = Embed(
-        title=f"{EMOJI.get('youtube')} Now Playing",
-        description=f"[**{track.title}**]({track.uri})\n\n`{track.position}`/`{track.length}`\n",
+        title=f"{EmojiConfig.get('youtube')} Now Playing",
+        description=f"[**{track.title}**]({track.uri})\n\n{progress_bar}\n`{current_time}`/`{duration_time}`\n",
         colour=Colour.green(),
         timestamp=datetime.now(),
     )
     embed.set_thumbnail(url=track.thumbnail)
     if not queue.is_empty:
         embed.add_field(
-            name=f"💭 Next ({queue.size} left)",
-            value=f"{'\n'.join([f'- [{t.title}]({t.uri}) `{t.length}`' for t in queue.get_queue()[:3]])}",
-            inline=False
+            name=f"💭 Next ({len(queue)} left)",
+            value=f"{'\n'.join([f'- [{t.title}]({t.uri}) `{_format_time(t.length)}`' for t in queue.peek_n(3)])}",
+            inline=False,
         )
     # embed.set_footer(text=track.requester.name, icon_url=track.requester.avatar)
     return embed

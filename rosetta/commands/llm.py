@@ -6,12 +6,12 @@ from discord import app_commands
 from discord.ext import commands
 from langfuse import get_client, openai
 
-from ..utils.config import LLM as LLMConfig
+from ..utils.config import LLMConfig
 from ..utils.embeds import InfoEmbed
 
 client = openai.AsyncOpenAI(
-    base_url=LLMConfig.get("BASE_URL"),
-    api_key=LLMConfig.get("API_KEY"),
+    base_url=LLMConfig.BASE_URL,
+    api_key=LLMConfig.API_KEY,
 )
 
 langfuse_client = get_client()
