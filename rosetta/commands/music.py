@@ -58,9 +58,9 @@ def get_k8s_lavalink_endpoints() -> list[dict]:
                 if subset.addresses:
                     for address in subset.addresses:
                         node_id = address.ip
-                        node_name = address.nodeName
-                        if address.targetRef:
-                            node_id = address.targetRef.name
+                        node_name = address.node_name
+                        if address.target_ref:
+                            node_id = address.target_ref.name
                         nodes.append(
                             {
                                 "host": address.ip,
