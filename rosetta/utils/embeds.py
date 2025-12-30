@@ -114,7 +114,7 @@ def _get_progress_bar(position_ms: int, duration_ms: int) -> str:
         )
 
 
-def NowPlayingEmbed(player: CustomPlayer):
+def NowPlayingEmbed(player: CustomPlayer, current_page: int, page_size: int):
     track = player.current
     queue = player.queue
 
@@ -123,15 +123,18 @@ def NowPlayingEmbed(player: CustomPlayer):
 
     embed = Embed(
         title=f"{EmojiConfig.get('youtube')} Now Playing",
-        description=f"[**{track.title}**]({track.uri})\n\n{progress_bar}\n`{current_time}`/`{duration_time}`\n",
+        description=f"[**{track.title}**]({track.uri})\n\n`{current_time}` {progress_bar} `{duration_time}`\n",
         colour=Colour.green(),
         timestamp=datetime.now(),
     )
     embed.set_thumbnail(url=track.thumbnail)
+
+    start_idx = (current_page - 1) * page_size
+    end_idx = min(start_idx + page_size, len(queue))
     if not queue.is_empty:
         embed.add_field(
             name=f"💭 Next ({len(queue)} left)",
-            value=f"{'\n'.join([f'- [{t.title}]({t.uri}) `{_format_time(t.length)}`' for t in queue.peek_n(3)])}",
+            value=f"{'\n'.join([f'- [{t.title}]({t.uri}) `{_format_time(t.length)}`' for t in queue.peek_n(end_idx, _start=start_idx)])}",
             inline=False,
         )
     # embed.set_footer(text=track.requester.name, icon_url=track.requester.avatar)

@@ -1,16 +1,20 @@
 import asyncio
 import logging
 from queue import Empty
+from typing import List
 
 import discord
 import pomice
 from discord import app_commands
 from discord.ext import commands
 
+from rosetta.utils.views import NowPlayingView
 from rosetta.utils.config import LavalinkConfig
 from rosetta.utils.player import CustomPlayer, LoopMode
 
 from ..utils.embeds import (
+    ErrorEmbed,
+    InfoEmbed,
     LeaveEmbed,
     NowPlayingEmbed,
     ProcessingEmbed,
@@ -50,20 +54,24 @@ def get_k8s_lavalink_endpoints() -> list[dict]:
 
         nodes = []
         if endpoints.subsets:
-            for i, subset in enumerate(endpoints.subsets):
+            for subset in endpoints.subsets:
                 if subset.addresses:
-                    for j, address in enumerate(subset.addresses):
-                        node_id = f"LAVALINK-{i}-{j}"
+                    for address in subset.addresses:
+                        node_id = address.ip
+                        node_name = address.nodeName
+                        if address.targetRef:
+                            node_id = address.targetRef.name
                         nodes.append(
                             {
                                 "host": address.ip,
                                 "port": port,
                                 "password": password,
                                 "identifier": node_id,
+                                "nodeName": node_name,
                             }
                         )
                         logger.info(
-                            f"Discovered Lavalink node: {node_id} at {address.ip}:{port}"
+                            f"Discovered Lavalink node: {node_id} at {address.ip}:{port} in {node_name}"
                         )
 
         if not nodes:
@@ -90,8 +98,20 @@ def get_local_lavalink_endpoints() -> list[dict]:
             "port": LavalinkConfig.PORT,
             "password": LavalinkConfig.PASSWORD,
             "identifier": "MAIN",
+            "nodeName": "localhost",
         }
     ]
+
+
+def get_nodes() -> list[dict]:
+    if LavalinkConfig.DISCOVERY_MODE == "k8s":
+        nodes = get_k8s_lavalink_endpoints()
+        if not nodes:
+            logger.warning("No k8s nodes found, falling back to local config")
+            nodes = get_local_lavalink_endpoints()
+    else:
+        nodes = get_local_lavalink_endpoints()
+    return nodes
 
 
 class Music(commands.Cog):
@@ -110,14 +130,7 @@ class Music(commands.Cog):
             f"Starting Pomice nodes (discovery mode: {LavalinkConfig.DISCOVERY_MODE})..."
         )
 
-        if LavalinkConfig.DISCOVERY_MODE == "k8s":
-            nodes = get_k8s_lavalink_endpoints()
-            if not nodes:
-                logger.warning("No k8s nodes found, falling back to local config")
-                nodes = get_local_lavalink_endpoints()
-        else:
-            nodes = get_local_lavalink_endpoints()
-
+        nodes = get_nodes()
         for node in nodes:
             try:
                 await self.pomice.create_node(
@@ -135,6 +148,9 @@ class Music(commands.Cog):
 
         if not self.pomice.nodes:
             logger.error("No Lavalink nodes available!")
+
+    async def remove_nodes(self):
+        await self.pomice.disconnect()
 
     async def _play(
         self,
@@ -338,8 +354,36 @@ class Music(commands.Cog):
         await interaction.response.defer()
         player = await self.ensure_player(interaction)
 
+        view = NowPlayingView(player)
         await interaction.followup.send(
-            embed=NowPlayingEmbed(player),
+            view=view
+        )
+
+    async def node_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> List[app_commands.Choice[str]]:
+        nodes = get_nodes()
+        return [
+            app_commands.Choice(
+                name=f"{node['identifier']} ({node['nodeName']})",
+                value=node["identifier"],
+            )
+            for node in nodes
+        ][:25]
+
+    @app_commands.command(name="switchnode", description="Switch Node")
+    @app_commands.autocomplete(node_name=node_autocomplete)
+    async def switchnode(
+        self,
+        interaction: discord.Interaction,
+        node_name: str,
+    ):
+        await interaction.response.defer()
+        player = await self.ensure_player(interaction)
+        new_node = self.pomice.get_node(identifier=node_name)
+        await player.swap_node(new_node)
+        await interaction.response.send_message(
+            embed=SuccessEmbed(self.bot.user, f"Swapped to {new_node}")
         )
 
     async def ensure_voice(self, interaction: discord.Interaction):
@@ -368,10 +412,16 @@ class Music(commands.Cog):
         )
         try:
             next_track = player.queue.get()
-            logger.info(
-                f"Playing next track in guild {player.guild.id}: {next_track.title}"
-            )
-            await player.play(next_track)
-        except pomice.QueueEmpty:
-            logger.info(f"Queue empty in guild {player.guild.id}, destroying player")
+            if next_track:
+                logger.info(
+                    f"Playing next track in guild {player.guild.id}: {next_track.title}"
+                )
+                await player.play(next_track)
+            else:
+                logger.info(
+                    f"Queue empty in guild {player.guild.id}, destroying player"
+                )
+                await player.destroy()
+        except Exception as e:
+            logger.error(e)
             await player.destroy()

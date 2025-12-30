@@ -56,9 +56,9 @@ class Queue(Generic[T]):
             return None
         return self._queue[0]
 
-    def peek_n(self, n: int) -> list[T]:
+    def peek_n(self, n: int, _start: int = 0) -> list[T]:
         """Return the first n items without removing them."""
-        return self._queue[:n]
+        return self._queue[_start:n]
 
     def remove(self, index: int) -> T | None:
         """Remove and return an item at the specified index."""
@@ -102,3 +102,6 @@ class CustomPlayer(Player):
     def __init__(self, client, channel, *, node=None):
         super().__init__(client, channel, node=node)
         self.queue = Queue[Track]()
+    
+    async def swap_node(self, new_node):
+        return await super()._swap_node(new_node=new_node)
