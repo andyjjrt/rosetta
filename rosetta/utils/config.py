@@ -5,6 +5,7 @@ from pydantic_settings import BaseSettings
 class BotSetting(BaseSettings):
     TOKEN: str | None = None
     CLIENT_ID: str | None = None
+    DEBUG: bool = False
 
     class Config:
         env_prefix = "BOT_"

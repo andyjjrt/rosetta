@@ -5,12 +5,13 @@ from pathlib import Path
 import discord
 from discord.ext import commands
 
-from .commands import LLM, Admin, Basics, Music, Mygo
-from .utils import setup_logging
-from .utils.config import BotConfig, EmojiConfig
 from .utils.embeds import ErrorEmbed
 
-setup_logging(Path(__file__).resolve().parent / "logging.yaml")
+from .commands import LLM, Admin, Basics, Music, Mygo
+from .utils.log import LogContext, PydanticAdapter, setup_logging
+from .utils.config import BotConfig, EmojiConfig
+
+setup_logging(dev_mode=BotConfig.DEBUG)
 logger = logging.getLogger("rosetta")
 
 intents = discord.Intents.default()
@@ -18,13 +19,7 @@ intents.message_content = True
 intents.guilds = True
 intents.voice_states = True
 
-pod_name = os.environ.get("SHARD_ID", "rosetta-0")
-shard_id = int(pod_name.split("-")[-1])
-total_shards = int(os.environ.get("TOTAL_SHARDS", 1))
-
-bot = commands.Bot(
-    command_prefix="!", intents=intents, shard_id=shard_id, shard_count=total_shards
-)
+bot = commands.Bot(command_prefix="!", intents=intents)
 
 
 @bot.event
@@ -53,8 +48,10 @@ async def on_ready():
 async def on_app_command_error(
     interaction: discord.Interaction, error: discord.app_commands.AppCommandError
 ):
-    logger.error(error)
+    ctx_data = LogContext.from_interaction(interaction)
+    adapter = PydanticAdapter(logger, ctx_data)
 
+    adapter.error(error)
     # Determine the error message
     if isinstance(error, discord.app_commands.CommandInvokeError):
         original_error = error.original

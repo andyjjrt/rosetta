@@ -49,6 +49,17 @@ class Queue(Generic[T]):
         if self.loop == LoopMode.QUEUE:
             self._queue.append(item)
         return item
+    
+    def skip_to(self, index: int) -> T:
+        if self.is_empty:
+            return None
+        item = self._queue.pop(0)
+        for _ in range(index):
+            item = self._queue.pop(0)
+            if self.loop == LoopMode.QUEUE:
+                self._queue.append(item)
+        assert item is not None
+        return item
 
     def peek(self) -> T | None:
         """Return the first item without removing it."""

@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from queue import Empty
 from typing import List
 
 import discord
@@ -8,21 +7,18 @@ import pomice
 from discord import app_commands
 from discord.ext import commands
 
+from rosetta.utils.log import LogContext, PydanticAdapter
 from rosetta.utils.views import NowPlayingView
 from rosetta.utils.config import LavalinkConfig
 from rosetta.utils.player import CustomPlayer, LoopMode
+from rosetta.utils.cog import Cog
 
 from ..utils.embeds import (
-    ErrorEmbed,
-    InfoEmbed,
     LeaveEmbed,
-    NowPlayingEmbed,
     ProcessingEmbed,
     SearchEmbed,
     SuccessEmbed,
 )
-
-logger = logging.getLogger(__name__)
 
 
 def get_k8s_lavalink_endpoints() -> list[dict]:
@@ -33,6 +29,8 @@ def get_k8s_lavalink_endpoints() -> list[dict]:
     try:
         from kubernetes import client
         from kubernetes import config as k8s_config
+
+        logger = logging.getLogger("rosetta")
 
         # Try in-cluster config first (when running inside k8s)
         try:
@@ -107,16 +105,15 @@ def get_nodes() -> list[dict]:
     if LavalinkConfig.DISCOVERY_MODE == "k8s":
         nodes = get_k8s_lavalink_endpoints()
         if not nodes:
-            logger.warning("No k8s nodes found, falling back to local config")
             nodes = get_local_lavalink_endpoints()
     else:
         nodes = get_local_lavalink_endpoints()
     return nodes
 
 
-class Music(commands.Cog):
+class Music(Cog):
     def __init__(self, bot: commands.Bot):
-        self.bot = bot
+        super().__init__(bot)
         self.pomice = pomice.NodePool()
         asyncio.create_task(self.start_nodes())
 
@@ -126,7 +123,7 @@ class Music(commands.Cog):
         - "k8s": Auto-discover Lavalink nodes from Kubernetes Endpoints
         - "local": Use local configuration from environment variables
         """
-        logger.info(
+        self._logger.info(
             f"Starting Pomice nodes (discovery mode: {LavalinkConfig.DISCOVERY_MODE})..."
         )
 
@@ -140,14 +137,14 @@ class Music(commands.Cog):
                     password=node["password"],
                     identifier=node["identifier"],
                 )
-                logger.info(
+                self._logger.info(
                     f"Pomice node '{node['identifier']}' is ready at {node['host']}:{node['port']}"
                 )
             except Exception as e:
-                logger.error(f"Failed to create node '{node['identifier']}': {e}")
+                self._logger.error(f"Failed to create node '{node['identifier']}': {e}")
 
         if not self.pomice.nodes:
-            logger.error("No Lavalink nodes available!")
+            self._logger.error("No Lavalink nodes available!")
 
     async def remove_nodes(self):
         await self.pomice.disconnect()
@@ -160,6 +157,7 @@ class Music(commands.Cog):
         shuffle: bool,
         top: bool,
     ):
+        adapter = interaction.extras.get("logger")
         player = interaction.guild.voice_client if interaction.guild else None
         if player is None:
             if interaction.user.voice and interaction.user.voice.channel:
@@ -171,7 +169,7 @@ class Music(commands.Cog):
         )
 
         if not results:
-            logger.warning(f"No results found for search term: {url}")
+            adapter.error(f"No results found for search term: {url}")
             raise commands.CommandError("No results were found for that search term.")
 
         if isinstance(results, pomice.Playlist):
@@ -179,15 +177,13 @@ class Music(commands.Cog):
             name = results.name
             uri = results.uri
             thumbnail = results.thumbnail
-            logger.info(
-                f"Enqueuing playlist: {name} ({len(tracks)} tracks) for guild {interaction.guild_id}"
-            )
+            adapter.info(f"Enqueued playlist: {name} ({len(tracks)} tracks)")
         else:
             tracks = results
             name = tracks[0].title
             uri = tracks[0].uri
             thumbnail = tracks[0].thumbnail
-            logger.info(f"Enqueuing track: {name} for guild {interaction.guild_id}")
+            adapter.info(f"Enqueued track: {name}")
 
         # top
         if top:
@@ -240,9 +236,6 @@ class Music(commands.Cog):
         shuffle: bool = False,
         top: bool = False,
     ):
-        logger.info(
-            f"Play command called by {interaction.user} in guild {interaction.guild_id} with url: {url}"
-        )
         await self.ensure_voice(interaction)
         await interaction.response.defer()
         message = await interaction.followup.send(
@@ -261,9 +254,6 @@ class Music(commands.Cog):
         ]
     )
     async def loop_command(self, interaction: discord.Interaction, loop: str = "Off"):
-        logger.info(
-            f"Loop command called by {interaction.user} in guild {interaction.guild_id} with mode: {loop}"
-        )
         player = await self.ensure_player(interaction)
 
         if loop == "Off":
@@ -282,11 +272,10 @@ class Music(commands.Cog):
     @app_commands.command(name="search", description="Search in Youtube")
     @app_commands.describe(keyword="keyword")
     async def search(self, interaction: discord.Interaction, keyword: str):
-        logger.info(
-            f"Search command called by {interaction.user} in guild {interaction.guild_id} with keyword: {keyword}"
-        )
+        adapter = interaction.extras.get("logger")
         await interaction.response.defer()
         tracks = await self.pomice.get_node().get_tracks(keyword)
+        adapter.info(f"Searched with keyword: {keyword}")
         await interaction.followup.send(
             embed=SearchEmbed(self.bot.user, keyword, tracks)
         )
@@ -295,9 +284,6 @@ class Music(commands.Cog):
         self, interaction: discord.Interaction, ephemeral: bool = False
     ):
         """Helper method to shuffle the queue"""
-        logger.info(
-            f"Shuffle requested by {interaction.user} in guild {interaction.guild_id}"
-        )
         player = await self.ensure_player(interaction)
         player.queue.shuffle()
         await interaction.response.send_message(
@@ -306,26 +292,20 @@ class Music(commands.Cog):
 
     async def do_skip(self, interaction: discord.Interaction, ephemeral: bool = False):
         """Helper method to skip to the next song"""
-        logger.info(
-            f"Skip requested by {interaction.user} in guild {interaction.guild_id}"
-        )
+        adapter = interaction.extras.get("logger")
         player = await self.ensure_player(interaction)
         await interaction.response.defer(ephemeral=ephemeral)
-        try:
-            track = player.queue.peek()
-            logger.info(
-                f"Skipping to next track: {track.title} in guild {interaction.guild_id}"
-            )
-            await player.stop()
+        track = player.queue.get()
+        if track:
+            adapter.info(f"Skipped to next track: {track.title}")
+            await player.play(track)
             embed = SuccessEmbed(
                 self.bot.user, f"Skipped to [**{track.title}**]({track.uri})"
             )
             embed.set_thumbnail(url=track.thumbnail)
             await interaction.followup.send(embed=embed, ephemeral=ephemeral)
-        except Empty:
-            logger.info(
-                f"Skip requested but queue is empty in guild {interaction.guild_id}"
-            )
+        else:
+            adapter.info("Skip requested but queue is empty")
             await interaction.followup.send(
                 embed=SuccessEmbed(self.bot.user, "No song left")
             )
@@ -342,9 +322,6 @@ class Music(commands.Cog):
 
     @app_commands.command(name="leave", description="Leave current channel")
     async def leave(self, interaction: discord.Interaction):
-        logger.info(
-            f"Leave command called by {interaction.user} in guild {interaction.guild_id}"
-        )
         player = await self.ensure_player(interaction)
         await player.destroy()
         await interaction.response.send_message(embed=LeaveEmbed(self.bot.user))
@@ -355,51 +332,51 @@ class Music(commands.Cog):
         player = await self.ensure_player(interaction)
 
         view = NowPlayingView(player)
-        await interaction.followup.send(
-            view=view
-        )
+        await interaction.followup.send(view=view)
 
-    async def node_autocomplete(
-        self, interaction: discord.Interaction, current: str
-    ) -> List[app_commands.Choice[str]]:
-        nodes = get_nodes()
-        return [
-            app_commands.Choice(
-                name=f"{node['identifier']} ({node['nodeName']})",
-                value=node["identifier"],
-            )
-            for node in nodes
-        ][:25]
+    # async def node_autocomplete(
+    #     self, interaction: discord.Interaction, current: str
+    # ) -> List[app_commands.Choice[str]]:
+    #     nodes = get_nodes()
+    #     return [
+    #         app_commands.Choice(
+    #             name=f"{node['identifier']} ({node['nodeName']})",
+    #             value=node["identifier"],
+    #         )
+    #         for node in nodes
+    #     ][:25]
 
-    @app_commands.command(name="switchnode", description="Switch Node")
-    @app_commands.autocomplete(node_name=node_autocomplete)
-    async def switchnode(
-        self,
-        interaction: discord.Interaction,
-        node_name: str,
-    ):
-        await interaction.response.defer()
-        player = await self.ensure_player(interaction)
-        new_node = self.pomice.get_node(identifier=node_name)
-        await player.swap_node(new_node)
-        await interaction.response.send_message(
-            embed=SuccessEmbed(self.bot.user, f"Swapped to {new_node}")
-        )
+    # @app_commands.command(name="switchnode", description="Switch Node")
+    # @app_commands.autocomplete(node_name=node_autocomplete)
+    # async def switchnode(
+    #     self,
+    #     interaction: discord.Interaction,
+    #     node_name: str,
+    # ):
+    #     await interaction.response.defer()
+    #     player = await self.ensure_player(interaction)
+    #     new_node = self.pomice.get_node(identifier=node_name)
+    #     await player.swap_node(new_node)
+    #     await interaction.followup.send(
+    #         embed=SuccessEmbed(self.bot.user, f"Swapped to {new_node}")
+    #     )
 
     async def ensure_voice(self, interaction: discord.Interaction):
         voice_client = interaction.guild.voice_client if interaction.guild else None
+        adapter = interaction.extras.get("logger")
         if voice_client is None:
             if not interaction.user.voice:
-                logger.warning(
-                    f"User {interaction.user} not in voice channel in guild {interaction.guild_id}"
+                adapter.warning(
+                    f"User {interaction.user} not in voice channel in guild {interaction.guild.name}"
                 )
                 raise commands.CommandError("You are not connected to a voice channel.")
         return voice_client
 
     async def ensure_player(self, interaction: discord.Interaction) -> CustomPlayer:
         player = interaction.guild.voice_client if interaction.guild else None
+        adapter = interaction.extras.get("logger")
         if not player:
-            logger.warning(f"Player not found for guild {interaction.guild_id}")
+            adapter.warning(f"Player not found for guild {interaction.guild.name}")
             raise commands.CommandError("The bot is not playing")
         return player
 
@@ -407,21 +384,22 @@ class Music(commands.Cog):
     async def on_pomice_track_end(
         self, player: CustomPlayer, track: pomice.Track, reason: str
     ):
-        logger.info(
-            f"Track ended in guild {player.guild.id}: {track.title} (Reason: {reason})"
+        self._logger.info(
+            f"Track {track} ended in guild {player.guild.name} (Reason: {reason})"
         )
-        try:
-            next_track = player.queue.get()
-            if next_track:
-                logger.info(
-                    f"Playing next track in guild {player.guild.id}: {next_track.title}"
-                )
-                await player.play(next_track)
-            else:
-                logger.info(
-                    f"Queue empty in guild {player.guild.id}, destroying player"
-                )
+        if reason == "finished":
+            try:
+                next_track = player.queue.get()
+                if next_track:
+                    self._logger.info(
+                        f"Playing next track in guild {player.guild.name}: {next_track.title}"
+                    )
+                    await player.play(next_track)
+                else:
+                    self._logger.info(
+                        f"Queue empty in guild {player.guild.name}, destroying player"
+                    )
+                    await player.destroy()
+            except Exception as e:
+                self._logger.error(e)
                 await player.destroy()
-        except Exception as e:
-            logger.error(e)
-            await player.destroy()

@@ -1,13 +1,13 @@
-import logging
-import time
-
 import discord
 from discord import app_commands
 from discord.ext import commands
 from langfuse import get_client, openai
 
+from rosetta.utils.views.LLM import LLMView
+
 from ..utils.config import LLMConfig
 from ..utils.embeds import InfoEmbed
+from ..utils.cog import Cog
 
 client = openai.AsyncOpenAI(
     base_url=LLMConfig.BASE_URL,
@@ -15,7 +15,6 @@ client = openai.AsyncOpenAI(
 )
 
 langfuse_client = get_client()
-logger = logging.getLogger("rosetta")
 
 UPDATE_INTERVAL_SECONDS = 1
 DISCORD_CHAR_LIMIT = 2000
@@ -33,44 +32,9 @@ async def get_models_autocomplete(
     return [app_commands.Choice(name=m, value=m) for m in models if current in m][:25]
 
 
-def find_best_split_position(text: str, max_len: int) -> int:
-    """
-    Finds the best position to split text to respect paragraphs, lines, and words.
-    Searches backwards from the max_len point.
-    """
-    if len(text) <= max_len:
-        return len(text)
-
-    # 1. Try to find a paragraph break (double newline)
-    try:
-        # Search backwards from the max_len position
-        pos = text.rindex("\n\n", 0, max_len)
-        return pos
-    except ValueError:
-        pass  # Not found
-
-    # 2. If no paragraph break, try a line break (single newline)
-    try:
-        pos = text.rindex("\n", 0, max_len)
-        return pos
-    except ValueError:
-        pass  # Not found
-
-    # 3. If no newline, try to find the last space to not break a word
-    try:
-        pos = text.rindex(" ", 0, max_len)
-        return pos
-    except ValueError:
-        pass  # Not found
-
-    # 4. If all else fails, force a hard cut at the safe limit
-    return max_len
-
-
-class LLM(commands.Cog):
+class LLM(Cog):
     def __init__(self, bot: commands.Bot):
-        self.bot = bot
-        self.response_queue = {}
+        super().__init__(bot)
 
     llm_group = app_commands.Group(name="llm", description="LLM commands")
 
@@ -112,18 +76,8 @@ class LLM(commands.Cog):
                 },
             )
 
-            response_messages = []
-            current_message_content = ""
-            full_response = ""
-            start_time, first_token_time, end_time = None, None, None
-
-            initial_message = await interaction.followup.send(
-                f"🧠 Thinking with `{model}`...", wait=True
-            )
-            response_messages.append(initial_message)
-            last_update_time = time.time()
-
-            start_time = time.time()
+            view = LLMView(model)
+            message = await interaction.followup.send(view=view, wait=True)
             try:
                 stream = await client.chat.completions.create(
                     model=model,
@@ -138,85 +92,11 @@ class LLM(commands.Cog):
                     stream_options={"include_usage": True},
                 )
 
-                usage = None
-
                 async for chunk in stream:
-                    content = chunk.choices[0].delta.content
-                    usage = chunk.usage
-                    if first_token_time is None and content:
-                        first_token_time = time.time()
-
-                    if content:
-                        current_message_content += content
-                        full_response += content  # Keep a full copy for logging
-                        # ... (Smart splitting and periodic update logic is unchanged) ...
-                        if len(current_message_content) > SAFE_SPLIT_LIMIT:
-                            split_pos = find_best_split_position(
-                                current_message_content, SAFE_SPLIT_LIMIT
-                            )
-                            text_to_send, carry_over_text = (
-                                current_message_content[:split_pos],
-                                current_message_content[split_pos:],
-                            )
-                            await response_messages[-1].edit(
-                                content=text_to_send.strip()
-                            )
-                            response_messages.append(
-                                await interaction.channel.send("...")
-                            )
-                            current_message_content = carry_over_text.lstrip()
-                            last_update_time = time.time()
-
-                        if time.time() - last_update_time >= UPDATE_INTERVAL_SECONDS:
-                            if current_message_content:
-                                await response_messages[-1].edit(
-                                    content=current_message_content + " █"
-                                )
-                                last_update_time = time.time()
-
-                end_time = time.time()
+                    await view.update_chunk(message, chunk)
+                await view.end_chunk(message)
 
             except Exception as e:
                 raise e
 
-            ttft, tps, completion_tokens = 0.0, 0.0, 0
-            if usage:
-                completion_tokens = usage.completion_tokens
-            if start_time and first_token_time:
-                ttft = first_token_time - start_time
-            if first_token_time and end_time:
-                generation_time = end_time - first_token_time
-                if generation_time > 0 and completion_tokens > 1:
-                    tps = (completion_tokens - 1) / generation_time
-
-            stats_text = (
-                f"\n\n"
-                f"-# {model} • {tps:.2f} tps • TTFT: {ttft:.2f}s • Tokens: {completion_tokens}"
-            )
-            final_content = current_message_content.strip()
-            # 3. Handle the final message edit
-            if final_content:
-                # Check if appending the stats would exceed Discord's character limit
-                if len(final_content) + len(stats_text) > DISCORD_CHAR_LIMIT:
-                    # If it's too long, edit the last message with just the content...
-                    await response_messages[-1].edit(content=final_content)
-                    # ...and send the stats in a new, separate message.
-                    await interaction.channel.send(stats_text.strip())
-                else:
-                    # If it fits, combine them and edit the last message.
-                    final_combined_content = final_content + stats_text
-                    await response_messages[-1].edit(content=final_combined_content)
-            else:
-                # Handle the case where the response was empty but we still want to clean up
-                if (
-                    len(response_messages) > 1
-                    and response_messages[-1].content == "..."
-                ):
-                    await response_messages[-1].delete()
-                else:
-                    # Edit the very first message if there was no output at all
-                    await response_messages[0].edit(
-                        content="*No response was generated.*"
-                    )
-
-            root_span.update(output=full_response)
+            root_span.update(output=view.full_response)

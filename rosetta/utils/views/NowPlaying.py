@@ -3,8 +3,8 @@ import math
 import discord
 from discord.ext import commands
 
-from rosetta.utils.config import EmojiConfig
-from rosetta.utils.player import CustomPlayer
+from ..config import EmojiConfig
+from ..player import CustomPlayer
 
 logger = logging.getLogger(__name__)
 
@@ -16,8 +16,6 @@ class NowPlayingView(discord.ui.LayoutView):
         self.page_size = 10
         self.container = self.construct_container(player)
         self.add_item(self.container)
-        self.actionrow = self.construct_actionrow(player)
-        self.add_item(self.actionrow)
 
     def refresh_callback(self):
         async def _callback(interaction: discord.Interaction):
@@ -26,10 +24,6 @@ class NowPlayingView(discord.ui.LayoutView):
             new_container = self.construct_container(player)
             self.refresh_item(self.container, new_container)
             self.container = new_container
-
-            new_actionrow = self.construct_actionrow(player)
-            self.refresh_item(self.actionrow, new_actionrow)
-            self.actionrow = new_actionrow
 
             await interaction.response.edit_message(view=self)
 
@@ -49,9 +43,22 @@ class NowPlayingView(discord.ui.LayoutView):
             self.refresh_item(self.container, new_container)
             self.container = new_container
 
-            new_actionrow = self.construct_actionrow(player, new_page)
-            self.refresh_item(self.actionrow, new_actionrow)
-            self.actionrow = new_actionrow
+            await interaction.response.edit_message(view=self)
+
+        return _callback
+
+    def select_callback(self):
+        async def _callback(interaction: discord.Interaction):
+            player = await self.ensure_player(interaction)
+
+            result = interaction.data["values"][0]
+            logger.info(result)
+            track = player.queue.skip_to(int(result))
+            await player.play(track)
+
+            new_container = self.construct_container(player)
+            self.refresh_item(self.container, new_container)
+            self.container = new_container
 
             await interaction.response.edit_message(view=self)
 
@@ -122,7 +129,7 @@ class NowPlayingView(discord.ui.LayoutView):
         )
         progress_bar = self._get_progress_bar(player.position, track.length)
 
-        title = discord.ui.TextDisplay(f"{EmojiConfig.get('youtube')} Now Playing")
+        title = discord.ui.TextDisplay(f"{EmojiConfig.get('youtube')} **Now Playing**")
         description = discord.ui.TextDisplay(f"[**{track.title}**]({track.uri})")
         progress = discord.ui.TextDisplay(
             f"`{current_time}` {progress_bar} `{duration_time}`"
@@ -135,30 +142,33 @@ class NowPlayingView(discord.ui.LayoutView):
             accent_color=self.accent_color,
         )
 
-        start_idx = (page - 1) * self.page_size
-        end_idx = min(start_idx + self.page_size, len(queue))
         if not queue.is_empty:
+            start_idx = (page - 1) * self.page_size
+            end_idx = min(start_idx + self.page_size, len(queue))
             queue_list = discord.ui.TextDisplay(
-                f"💭 Next ({len(queue)} left)\n{'\n'.join([f'- [{t.title}]({t.uri}) `{self._format_time(t.length)}`' for t in queue.peek_n(end_idx, _start=start_idx)])}"
+                f"💭 Next ({len(queue)} left)\n{'\n'.join([f'{i + 1}. [{t.title}]({t.uri}) `{self._format_time(t.length)}`' for i, t in enumerate(queue.peek_n(end_idx, _start=start_idx), start=start_idx)])}"
             )
             container.add_item(queue_list)
 
-        return container
-
-    def refresh_item(self, old_item: discord.ui.Item, new_item: discord.ui.Item):
-        new_item._update_view(self)
-        self._swap_item(old_item, new_item, "")
-        del old_item
-
-    def construct_actionrow(self, player: CustomPlayer, page: int = 1):
-        queue = player.queue
-        total_pages = (len(queue) + self.page_size - 1) // self.page_size
+            options = [
+                discord.SelectOption(label=t.title, description=t.author, value=i)
+                for i, t in enumerate(
+                    queue.peek_n(end_idx, _start=start_idx), start=start_idx
+                )
+            ]
+            song_select = discord.ui.Select(
+                custom_id="song_select", placeholder="Skip to...", options=options
+            )
+            song_select.callback = self.select_callback()
+            container.add_item(discord.ui.ActionRow(song_select))
 
         refresh_button = discord.ui.Button(
             label="Refresh", custom_id="refresh", style=discord.ButtonStyle.primary
         )
         refresh_button.callback = self.refresh_callback()
         actionrow = discord.ui.ActionRow(refresh_button)
+
+        total_pages = (len(queue) + self.page_size - 1) // self.page_size
         if total_pages > 1:
             previous_button = discord.ui.Button(
                 label="Previous", custom_id="previous", disabled=page <= 1
@@ -170,8 +180,14 @@ class NowPlayingView(discord.ui.LayoutView):
             )
             next_button.callback = self.pagination_callback(page)
             actionrow.add_item(next_button)
+        container.add_item(actionrow)
 
-        return actionrow
+        return container
+
+    def refresh_item(self, old_item: discord.ui.Item, new_item: discord.ui.Item):
+        new_item._update_view(self)
+        self._swap_item(old_item, new_item, "")
+        del old_item
 
     async def ensure_voice(self, interaction: discord.Interaction):
         voice_client = interaction.guild.voice_client if interaction.guild else None
