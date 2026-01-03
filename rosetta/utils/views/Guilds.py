@@ -9,7 +9,7 @@ class GuildsView(discord.ui.LayoutView):
         super().__init__(timeout=300)
         self.bot = bot
         self.accent_color = accent_color
-        self.page_size = 10
+        self.page_size = 5
         self.container = self.construct_container()
         self.add_item(self.container)
     
