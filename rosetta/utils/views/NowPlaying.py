@@ -1,12 +1,13 @@
 import logging
 import math
+
 import discord
 from discord.ext import commands
 
 from ..config import EmojiConfig
 from ..player import CustomPlayer
 
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("rosetta")
 
 
 class NowPlayingView(discord.ui.LayoutView):

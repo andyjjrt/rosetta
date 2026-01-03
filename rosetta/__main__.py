@@ -1,15 +1,12 @@
 import logging
-import os
-from pathlib import Path
 
 import discord
 from discord.ext import commands
 
-from .utils.embeds import ErrorEmbed
-
-from .commands import LLM, Admin, Basics, Music, Mygo
-from .utils.log import LogContext, PydanticAdapter, setup_logging
+from .commands import LLM, Basics, Music, Mygo
 from .utils.config import BotConfig, EmojiConfig
+from .utils.embeds import ErrorEmbed
+from .utils.log import LogContext, PydanticAdapter, setup_logging
 
 setup_logging(dev_mode=BotConfig.DEBUG)
 logger = logging.getLogger("rosetta")
@@ -76,7 +73,6 @@ async def on_app_command_error(
 
 
 async def setup_hook():
-    await bot.add_cog(Admin(bot))
     await bot.add_cog(Basics(bot))
     await bot.add_cog(Music(bot))
     await bot.add_cog(Mygo(bot))

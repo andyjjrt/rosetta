@@ -3,11 +3,10 @@ from discord import app_commands
 from discord.ext import commands
 from langfuse import get_client, openai
 
-from rosetta.utils.views.LLM import LLMView
-
+from ..utils.cog import Cog
 from ..utils.config import LLMConfig
 from ..utils.embeds import InfoEmbed
-from ..utils.cog import Cog
+from ..utils.views.LLM import LLMView
 
 client = openai.AsyncOpenAI(
     base_url=LLMConfig.BASE_URL,
@@ -24,11 +23,8 @@ SAFE_SPLIT_LIMIT = 1980
 async def get_models_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
-    if await interaction.client.is_owner(interaction.user):
-        models_list = await client.models.list()
-        models = [m.id for m in models_list.data]
-    else:
-        models = [LLMConfig.get("DEFAULT_MODEL")]
+    models_list = await client.models.list()
+    models = [m.id for m in models_list.data]
     return [app_commands.Choice(name=m, value=m) for m in models if current in m][:25]
 
 
@@ -36,7 +32,14 @@ class LLM(Cog):
     def __init__(self, bot: commands.Bot):
         super().__init__(bot)
 
-    llm_group = app_commands.Group(name="llm", description="LLM commands")
+    llm_group = app_commands.Group(
+        name="llm",
+        description="LLM commands",
+        allowed_installs=app_commands.AppInstallationType(guild=True, user=True),
+        allowed_contexts=app_commands.AppCommandContext(
+            guild=True, dm_channel=True, private_channel=True
+        ),
+    )
 
     @llm_group.command(name="list", description="List all models")
     async def list_models(self, interaction: discord.Interaction):

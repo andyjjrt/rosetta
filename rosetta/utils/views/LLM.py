@@ -1,4 +1,5 @@
 import time
+
 import discord
 from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 

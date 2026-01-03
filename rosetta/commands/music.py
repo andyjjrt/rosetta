@@ -1,24 +1,20 @@
 import asyncio
 import logging
-from typing import List
 
 import discord
 import pomice
 from discord import app_commands
 from discord.ext import commands
 
-from rosetta.utils.log import LogContext, PydanticAdapter
-from rosetta.utils.views import NowPlayingView
-from rosetta.utils.config import LavalinkConfig
-from rosetta.utils.player import CustomPlayer, LoopMode
-from rosetta.utils.cog import Cog
-
+from ..utils.cog import Cog
+from ..utils.config import LavalinkConfig
 from ..utils.embeds import (
     LeaveEmbed,
     ProcessingEmbed,
-    SearchEmbed,
     SuccessEmbed,
 )
+from ..utils.player import CustomPlayer, LoopMode
+from ..utils.views import NowPlayingView, SearchView
 
 
 def get_k8s_lavalink_endpoints() -> list[dict]:
@@ -153,9 +149,9 @@ class Music(Cog):
         self,
         interaction: discord.Interaction,
         url: str,
-        loop: str,
-        shuffle: bool,
-        top: bool,
+        loop: str = "Off",
+        shuffle: bool = False,
+        top: bool = False,
     ):
         adapter = interaction.extras.get("logger")
         player = interaction.guild.voice_client if interaction.guild else None
@@ -276,9 +272,8 @@ class Music(Cog):
         await interaction.response.defer()
         tracks = await self.pomice.get_node().get_tracks(keyword)
         adapter.info(f"Searched with keyword: {keyword}")
-        await interaction.followup.send(
-            embed=SearchEmbed(self.bot.user, keyword, tracks)
-        )
+        view = SearchView(self.bot, keyword, tracks)
+        await interaction.followup.send(view=view)
 
     async def do_shuffle(
         self, interaction: discord.Interaction, ephemeral: bool = False
