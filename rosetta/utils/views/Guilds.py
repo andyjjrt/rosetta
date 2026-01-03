@@ -1,7 +1,8 @@
-from datetime import datetime
 
 import discord
 from discord.ext import commands
+
+from rosetta.utils.embeds import ErrorEmbed, SuccessEmbed
 
 
 class GuildsView(discord.ui.LayoutView):
@@ -12,7 +13,7 @@ class GuildsView(discord.ui.LayoutView):
         self.page_size = 5
         self.container = self.construct_container()
         self.add_item(self.container)
-    
+
     def refresh_item(self, old_item: discord.ui.Item, new_item: discord.ui.Item):
         new_item._update_view(self)
         self._swap_item(old_item, new_item, "")
@@ -42,16 +43,32 @@ class GuildsView(discord.ui.LayoutView):
 
     def leave_callback(self, guild_id: int, guild_name: str):
         async def _callback(interaction: discord.Interaction):
+            is_owner = await self.bot.is_owner(interaction.user)
+            if not is_owner:
+                await interaction.response.send_message(
+                    embed=ErrorEmbed(
+                        user=interaction.user,
+                        error="Only the bot owner can use this action.",
+                    ),
+                    ephemeral=True,
+                )
+                return
             target_guild = self.bot.get_guild(guild_id)
             if target_guild:
-                # await target_guild.leave()
+                await target_guild.leave()
                 await interaction.response.send_message(
-                    f"✅ Left guild **{guild_name}** (`{guild_id}`)",
+                    embed=SuccessEmbed(
+                        user=interaction.user,
+                        message=f"Left guild **{guild_name}** (`{guild_id}`)",
+                    ),
                     ephemeral=True,
                 )
             else:
                 await interaction.response.send_message(
-                    f"❌ Guild **{guild_name}** (`{guild_id}`) not found",
+                    embed=ErrorEmbed(
+                        user=interaction.user,
+                        error=f"Guild **{guild_name}** (`{guild_id}`) not found",
+                    ),
                     ephemeral=True,
                 )
 
@@ -87,7 +104,11 @@ class GuildsView(discord.ui.LayoutView):
                 f"ID: `{guild.id}`\n"
                 f"Members: **{guild.member_count:,}** | Owner: {owner}"
             )
-            leave_btn = discord.ui.Button(label="Leave", custom_id=f"leave_{guild.id}", style=discord.ButtonStyle.danger)
+            leave_btn = discord.ui.Button(
+                label="Leave",
+                custom_id=f"leave_{guild.id}",
+                style=discord.ButtonStyle.danger,
+            )
             leave_btn.callback = self.leave_callback(guild.id, guild.name)
             section = discord.ui.Section(guild_info, accessory=leave_btn)
             container.add_item(section)

@@ -2,7 +2,7 @@ import random
 from enum import Enum
 from typing import Generic, TypeVar
 
-from pomice import Player, Track
+from pomice import NodePool, Player, Track
 
 T = TypeVar("T")
 
@@ -110,9 +110,12 @@ class Queue(Generic[T]):
 
 
 class CustomPlayer(Player):
-    def __init__(self, client, channel, *, node=None):
+    def __init__(self, client, channel, *, node=None, node_identifier: str | None = None):
+        if node_identifier is not None and node is None:
+            node = NodePool.get_node(identifier=node_identifier)
         super().__init__(client, channel, node=node)
         self.queue = Queue[Track]()
     
     async def swap_node(self, new_node):
-        return await super()._swap_node(new_node=new_node)
+        await super()._swap_node(new_node=new_node)
+        await self.set_volume(10)

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from functools import partial
 
 import discord
 import pomice
@@ -93,7 +94,14 @@ def get_local_lavalink_endpoints() -> list[dict]:
             "password": LavalinkConfig.PASSWORD,
             "identifier": "MAIN",
             "nodeName": "localhost",
-        }
+        },
+        {
+            "host": LavalinkConfig.HOST,
+            "port": LavalinkConfig.PORT + 1,
+            "password": LavalinkConfig.PASSWORD,
+            "identifier": "MAIN2",
+            "nodeName": "localhost",
+        },
     ]
 
 
@@ -145,6 +153,18 @@ class Music(Cog):
     async def remove_nodes(self):
         await self.pomice.disconnect()
 
+    async def node_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        nodes = get_nodes()
+        return [
+            app_commands.Choice(
+                name=f"{node['identifier']} ({node['nodeName']})",
+                value=node["identifier"],
+            )
+            for node in nodes
+        ][:25]
+
     async def _play(
         self,
         interaction: discord.Interaction,
@@ -152,12 +172,22 @@ class Music(Cog):
         loop: str = "Off",
         shuffle: bool = False,
         top: bool = False,
+        node_name: str | None = None,
     ):
         adapter = interaction.extras.get("logger")
-        player = interaction.guild.voice_client if interaction.guild else None
+        player: CustomPlayer | None = (
+            interaction.guild.voice_client if interaction.guild else None
+        )
         if player is None:
             if interaction.user.voice and interaction.user.voice.channel:
-                player = await interaction.user.voice.channel.connect(cls=CustomPlayer)
+                player_cls = (
+                    partial(CustomPlayer, node_identifier=node_name)
+                    if node_name
+                    else CustomPlayer
+                )
+                player: CustomPlayer = await interaction.user.voice.channel.connect(
+                    cls=player_cls
+                )
                 await player.set_volume(10)
 
         results = await player.get_tracks(
@@ -205,7 +235,14 @@ class Music(Cog):
             track = player.queue.get()
             await player.play(track)
 
-        embed = SuccessEmbed(interaction.user, f"Enqueued [**{name}**]({uri})")
+        embed = SuccessEmbed(
+            interaction.user,
+            f"Enqueued [**{name}**]({uri})",
+        )
+        embed.set_footer(
+            text=f"{interaction.user.name} • {player.node._identifier}",
+            icon_url=interaction.user.avatar,
+        )
         embed.set_thumbnail(url=thumbnail)
 
         return embed
@@ -224,6 +261,7 @@ class Music(Cog):
             app_commands.Choice(name="Queue", value="Queue"),
         ]
     )
+    @app_commands.autocomplete(node_name=node_autocomplete)
     async def play(
         self,
         interaction: discord.Interaction,
@@ -231,13 +269,14 @@ class Music(Cog):
         loop: str = "Off",
         shuffle: bool = False,
         top: bool = False,
+        node_name: str | None = None,
     ):
         await self.ensure_voice(interaction)
         await interaction.response.defer()
         message = await interaction.followup.send(
             embed=ProcessingEmbed(self.bot.user), wait=True
         )
-        embed = await self._play(interaction, url, loop, shuffle, top)
+        embed = await self._play(interaction, url, loop, shuffle, top, node_name)
         await message.edit(embed=embed)
 
     @app_commands.command(name="loop", description="Set loop")
@@ -329,32 +368,36 @@ class Music(Cog):
         view = NowPlayingView(player)
         await interaction.followup.send(view=view)
 
-    # async def node_autocomplete(
-    #     self, interaction: discord.Interaction, current: str
-    # ) -> List[app_commands.Choice[str]]:
-    #     nodes = get_nodes()
-    #     return [
-    #         app_commands.Choice(
-    #             name=f"{node['identifier']} ({node['nodeName']})",
-    #             value=node["identifier"],
-    #         )
-    #         for node in nodes
-    #     ][:25]
-
-    # @app_commands.command(name="switchnode", description="Switch Node")
-    # @app_commands.autocomplete(node_name=node_autocomplete)
-    # async def switchnode(
-    #     self,
-    #     interaction: discord.Interaction,
-    #     node_name: str,
-    # ):
-    #     await interaction.response.defer()
-    #     player = await self.ensure_player(interaction)
-    #     new_node = self.pomice.get_node(identifier=node_name)
-    #     await player.swap_node(new_node)
-    #     await interaction.followup.send(
-    #         embed=SuccessEmbed(self.bot.user, f"Swapped to {new_node}")
-    #     )
+    @app_commands.command(name="switchnode", description="Switch to a different Lavalink node")
+    @app_commands.describe(node_name="The node to switch to")
+    @app_commands.autocomplete(node_name=node_autocomplete)
+    async def switchnode(
+        self,
+        interaction: discord.Interaction,
+        node_name: str,
+    ):
+        adapter = interaction.extras.get("logger")
+        await interaction.response.defer()
+        player = await self.ensure_player(interaction)
+        
+        old_node_id = player.node._identifier
+        new_node = self.pomice.get_node(identifier=node_name)
+        
+        if new_node is None:
+            raise commands.CommandError(f"Node '{node_name}' not found")
+        
+        if old_node_id == node_name:
+            await interaction.followup.send(
+                embed=SuccessEmbed(self.bot.user, f"Already connected to **{node_name}**")
+            )
+            return
+        
+        await player.swap_node(new_node)
+        adapter.info(f"Switched from node '{old_node_id}' to '{node_name}'")
+        
+        await interaction.followup.send(
+            embed=SuccessEmbed(self.bot.user, f"Switched from **{old_node_id}** to **{node_name}**")
+        )
 
     async def ensure_voice(self, interaction: discord.Interaction):
         voice_client = interaction.guild.voice_client if interaction.guild else None

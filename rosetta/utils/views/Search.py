@@ -1,10 +1,9 @@
-from typing import List
 import logging
+from typing import TYPE_CHECKING, List
 
 import discord
 import pomice
 from discord.ext import commands
-from typing import TYPE_CHECKING
 
 from rosetta.utils.log import LogContext, PydanticAdapter
 
