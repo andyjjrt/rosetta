@@ -248,6 +248,8 @@ class Music(Cog):
         return embed
 
     @app_commands.command(name="play", description="Play Youtube music")
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.describe(
         url="url",
         loop="loop",
@@ -280,6 +282,8 @@ class Music(Cog):
         await message.edit(embed=embed)
 
     @app_commands.command(name="loop", description="Set loop")
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.describe(loop="loop mode")
     @app_commands.choices(
         loop=[
@@ -305,6 +309,8 @@ class Music(Cog):
         )
 
     @app_commands.command(name="search", description="Search in Youtube")
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.describe(keyword="keyword")
     async def search(self, interaction: discord.Interaction, keyword: str):
         adapter = interaction.extras.get("logger")
@@ -340,35 +346,46 @@ class Music(Cog):
             await interaction.followup.send(embed=embed, ephemeral=ephemeral)
         else:
             adapter.info("Skip requested but queue is empty")
+            await player.destroy()
             await interaction.followup.send(
-                embed=SuccessEmbed(self.bot.user, "No song left")
+                embed=SuccessEmbed(self.bot.user, "No song left, leaving")
             )
 
     @app_commands.command(name="shuffle", description="Shuffle")
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.describe(ephemeral="hide response")
     async def shuffle(self, interaction: discord.Interaction, ephemeral: bool = False):
         await self.do_shuffle(interaction, ephemeral)
 
     @app_commands.command(name="skip", description="Skip to next song")
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.describe(ephemeral="hide response")
     async def skip(self, interaction: discord.Interaction, ephemeral: bool = False):
         await self.do_skip(interaction, ephemeral)
 
     @app_commands.command(name="leave", description="Leave current channel")
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def leave(self, interaction: discord.Interaction):
         player = await self.ensure_player(interaction)
         await player.destroy()
         await interaction.response.send_message(embed=LeaveEmbed(self.bot.user))
 
     @app_commands.command(name="nowplaying", description="Show the song playing now")
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     async def nowplaying(self, interaction: discord.Interaction):
         await interaction.response.defer()
         player = await self.ensure_player(interaction)
 
-        view = NowPlayingView(player)
+        view = NowPlayingView(player, interaction.user)
         await interaction.followup.send(view=view)
 
     @app_commands.command(name="switchnode", description="Switch to a different Lavalink node")
+    @app_commands.allowed_installs(guilds=True, users=False)
+    @app_commands.allowed_contexts(guilds=True, dms=False, private_channels=False)
     @app_commands.describe(node_name="The node to switch to")
     @app_commands.autocomplete(node_name=node_autocomplete)
     async def switchnode(

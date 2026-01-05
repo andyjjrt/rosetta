@@ -6,13 +6,22 @@ from rosetta.utils.embeds import ErrorEmbed, SuccessEmbed
 
 
 class GuildsView(discord.ui.LayoutView):
-    def __init__(self, bot: commands.Bot, accent_color: int = 0x229AE0):
+    def __init__(self, bot: commands.Bot, user: discord.User | discord.Member, accent_color: int = 0x229AE0):
         super().__init__(timeout=300)
         self.bot = bot
+        self.user = user
         self.accent_color = accent_color
         self.page_size = 5
         self.container = self.construct_container()
         self.add_item(self.container)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user.id:
+            await interaction.response.send_message(
+                "You cannot interact with this view.", ephemeral=True
+            )
+            return False
+        return True
 
     def refresh_item(self, old_item: discord.ui.Item, new_item: discord.ui.Item):
         new_item._update_view(self)

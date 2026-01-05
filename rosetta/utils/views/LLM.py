@@ -5,12 +5,12 @@ from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 
 UPDATE_INTERVAL_SECONDS = 1
 DISCORD_CHAR_LIMIT = 4000
-SAFE_SPLIT_LIMIT = 3980
+SAFE_SPLIT_LIMIT = 3900
 
 
 class LLMView(discord.ui.LayoutView):
     def __init__(self, model: str):
-        super().__init__()
+        super().__init__(timeout=300)
         self.last_update_time = time.time()
         self.start_time, self.first_token_time, self.end_time = time.time(), None, None
 
@@ -18,6 +18,8 @@ class LLMView(discord.ui.LayoutView):
         self.current_message_content = ""
         self.full_response = ""
         self.model = model
+        self.current_page = 1
+        self.message: discord.WebhookMessage | None = None
 
         self.usage = None
         self.ttft, self.tps, self.completion_tokens = 0.0, 0.0, 0
@@ -57,23 +59,84 @@ class LLMView(discord.ui.LayoutView):
         # 4. If all else fails, force a hard cut at the safe limit
         return max_len
 
-    async def update_view(self, message: discord.WebhookMessage):
-        self.clear_items()
+    def refresh_item(self, old_item: discord.ui.Item, new_item: discord.ui.Item):
+        new_item._update_view(self)
+        self._swap_item(old_item, new_item, "")
+        del old_item
+
+    def pagination_callback(self, current_page: int = 1):
+        async def _callback(interaction: discord.Interaction):
+            total_pages = len(self.response_messages)
+            new_page = current_page
+
+            if interaction.data["custom_id"] == "next":
+                new_page = min(current_page + 1, total_pages)
+            elif interaction.data["custom_id"] == "previous":
+                new_page = max(current_page - 1, 1)
+
+            self.current_page = new_page
+            new_container = self.construct_container(new_page)
+            self.refresh_item(self.container, new_container)
+            self.container = new_container
+
+            await interaction.response.edit_message(view=self)
+
+        return _callback
+
+    def construct_container(self, page: int = -1):
         container = discord.ui.Container()
+        total_pages = len(self.response_messages)
 
-        for response in self.response_messages:
-            container.add_item(discord.ui.TextDisplay(response))
-
-        if not self.end_time:
+        # page -1 means show current streaming content only
+        if page == -1:
             current_message = self.current_message_content + " █"
             container.add_item(discord.ui.TextDisplay(current_message))
-        else:
+        elif total_pages > 0 and 1 <= page <= total_pages:
+            # Show only the specified page's content (1 response message per page)
+            page_content = self.response_messages[page - 1]
+            container.add_item(discord.ui.TextDisplay(page_content))
+
+        # Footer with stats (only when finished)
+        if self.end_time:
+            container.add_item(
+                discord.ui.Separator(spacing=discord.enums.SeparatorSpacing.small)
+            )
             container.add_item(
                 discord.ui.TextDisplay(
                     f"-# {self.model} • {self.tps:.2f} tps • TTFT: {self.ttft:.2f}s • Tokens: {self.completion_tokens}"
                 )
             )
-        self.add_item(container)
+
+        # Pagination controls (only when there are multiple pages and streaming is done)
+        if self.end_time and total_pages > 1:
+            container.add_item(
+                discord.ui.Separator(spacing=discord.enums.SeparatorSpacing.small)
+            )
+            footer = discord.ui.TextDisplay(f"-# Page {self.current_page}/{total_pages}")
+            container.add_item(footer)
+
+            actionrow = discord.ui.ActionRow()
+            previous_button = discord.ui.Button(
+                label="Previous", custom_id="previous", disabled=self.current_page <= 1
+            )
+            previous_button.callback = self.pagination_callback(self.current_page)
+            actionrow.add_item(previous_button)
+
+            next_button = discord.ui.Button(
+                label="Next", custom_id="next", disabled=self.current_page >= total_pages
+            )
+            next_button.callback = self.pagination_callback(self.current_page)
+            actionrow.add_item(next_button)
+
+            container.add_item(actionrow)
+
+        return container
+
+    async def update_view(self, message: discord.WebhookMessage, page: int = -1):
+        self.message = message
+        self.clear_items()
+        self.container = self.construct_container(page)
+        self.add_item(self.container)
 
         await message.edit(view=self)
 
@@ -107,6 +170,7 @@ class LLMView(discord.ui.LayoutView):
     async def end_chunk(self, message: discord.WebhookMessage):
         self.end_time = time.time()
         self.response_messages.append(self.current_message_content)
+        self.current_page = len(self.response_messages)  # Go to the last page
 
         if self.usage:
             self.completion_tokens = self.usage.completion_tokens
@@ -117,4 +181,4 @@ class LLMView(discord.ui.LayoutView):
             if generation_time > 0 and self.completion_tokens > 1:
                 self.tps = (self.completion_tokens - 1) / generation_time
 
-        await self.update_view(message)
+        await self.update_view(message, self.current_page)

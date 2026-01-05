@@ -92,7 +92,7 @@ class LLM(Cog):
                         {"role": "user", "content": prompt},
                     ],
                     stream=True,
-                    stream_options={"include_usage": True},
+                    stream_options={"include_usage": True}
                 )
 
                 async for chunk in stream:

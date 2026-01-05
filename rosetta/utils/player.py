@@ -16,6 +16,7 @@ class LoopMode(Enum):
 class Queue(Generic[T]):
     def __init__(self):
         self._queue: list[T] = []
+        self._now_playing: T | None = None
         self.loop = LoopMode.NONE
 
     def __len__(self) -> int:
@@ -31,6 +32,11 @@ class Queue(Generic[T]):
     def is_empty(self) -> bool:
         return len(self._queue) == 0
 
+    @property
+    def now_playing(self) -> T | None:
+        """Return the currently playing item."""
+        return self._now_playing
+
     def add(self, items: list[T]):
         """Add items to the end of the queue."""
         self._queue.extend(items)
@@ -41,24 +47,43 @@ class Queue(Generic[T]):
 
     def get(self) -> T | None:
         """Remove and return the first item from the queue."""
+        # Loop one: return the currently playing track
+        if self.loop == LoopMode.ONE and self._now_playing is not None:
+            return self._now_playing
+        
+        # Empty queue handling
         if self.is_empty:
+            # Loop queue with nothing left: return now_playing
+            if self.loop == LoopMode.QUEUE and self._now_playing is not None:
+                return self._now_playing
             return None
-        if self.loop == LoopMode.ONE:
-            return self._queue[0]
+        
+        # Get next item
         item = self._queue.pop(0)
         if self.loop == LoopMode.QUEUE:
-            self._queue.append(item)
+            self._queue.append(self._now_playing)
+        
+        self._now_playing = item
         return item
     
-    def skip_to(self, index: int) -> T:
+    def skip_to(self, index: int) -> T | None:
+        """Skip to a specific index in the queue."""
         if self.is_empty:
             return None
-        item = self._queue.pop(0)
+        
+        # Add current now_playing to end if loop queue
+        if self.loop == LoopMode.QUEUE and self._now_playing is not None:
+            self._queue.append(self._now_playing)
+        
+        # Skip through items up to index
         for _ in range(index):
             item = self._queue.pop(0)
             if self.loop == LoopMode.QUEUE:
                 self._queue.append(item)
-        assert item is not None
+        
+        # Get the target item
+        item = self._queue.pop(0)
+        self._now_playing = item
         return item
 
     def peek(self) -> T | None:
@@ -80,6 +105,7 @@ class Queue(Generic[T]):
     def clear(self):
         """Clear all items from the queue."""
         self._queue.clear()
+        self._now_playing = None
 
     def shuffle(self):
         """Shuffle the queue randomly."""

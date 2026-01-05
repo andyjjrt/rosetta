@@ -11,12 +11,21 @@ logger = logging.getLogger("rosetta")
 
 
 class NowPlayingView(discord.ui.LayoutView):
-    def __init__(self, player: CustomPlayer, accent_color: int = 0x229AE0):
+    def __init__(self, player: CustomPlayer, user: discord.User | discord.Member, accent_color: int = 0x229AE0):
         super().__init__()
+        self.user = user
         self.accent_color = accent_color
         self.page_size = 10
         self.container = self.construct_container(player)
         self.add_item(self.container)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id != self.user.id:
+            await interaction.response.send_message(
+                "You cannot interact with this view.", ephemeral=True
+            )
+            return False
+        return True
 
     def refresh_callback(self):
         async def _callback(interaction: discord.Interaction):
@@ -53,7 +62,6 @@ class NowPlayingView(discord.ui.LayoutView):
             player = await self.ensure_player(interaction)
 
             result = interaction.data["values"][0]
-            logger.info(result)
             track = player.queue.skip_to(int(result))
             await player.play(track)
 

@@ -39,19 +39,12 @@ class Basics(Cog):
         await interaction.response.send_message(embed=embed)
 
     @commands.is_owner()
-    @commands.command(name="version", description="Show version information")
-    async def admin(self, ctx: commands.Context):
-        embed = await self.generate_version_embed(ctx, is_admin=True)
-
-        await ctx.reply(embed=embed)
-
-    @commands.is_owner()
     @commands.command(name="guilds", description="Show all guilds the bot is in")
     async def guilds(self, ctx: commands.Context):
         """Display all guilds the bot is currently in"""
         from ..utils.views import GuildsView
 
-        view = GuildsView(self.bot)
+        view = GuildsView(self.bot, ctx.author)
         await ctx.reply(view=view)
 
     async def generate_version_embed(
