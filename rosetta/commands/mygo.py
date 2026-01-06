@@ -11,15 +11,18 @@ import ffmpeg
 from discord import app_commands
 from discord.ext import commands
 
+from ..utils.cog import Cog
 
-class Mygo(commands.Cog):
+
+class Mygo(Cog):
     FOLDER = "mygo-ave-video"
     data = []
 
     def __init__(self, bot: commands.Bot):
-        self.bot = bot
+        super().__init__(bot=bot)
         with open(os.path.join(self.FOLDER, "data.json")) as f:
             Mygo.data = json.load(f)
+       
 
     async def text_autocomplete(
         self, interaction: discord.Interaction, current: str
@@ -82,6 +85,8 @@ class Mygo(commands.Cog):
         return gif_buffer
 
     @app_commands.command(name="mygo", description="Generate MyGO GIF from anime")
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.describe(
         text="Select a scene",
         resolution="Output resolution",

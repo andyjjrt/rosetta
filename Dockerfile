@@ -9,7 +9,7 @@ ENV ROSETTA_VERSION=$ROSETTA_VERSION
 
 WORKDIR /app
 
-RUN apk update && apk add ffmpeg deno
+RUN apk update && apk add ffmpeg
 RUN uv sync --frozen  --no-dev
 # RUN uv add -U yt-dlp
 

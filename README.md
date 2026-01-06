@@ -1,27 +1,36 @@
 # Rosetta
 
 ## Install
-1. Create config fie `config.ini`
+1. Create config file `config.ini` or use environment variables
 ```ini
 [bot]
 TOKEN=xxx
 CLIENT_ID=xxx
-[bot.emoji]
-success=<:name:xxx>
-error=<:name:xxx>
-youtube=<:name:xxx>
-progress_start=<:name:xxx>
-progress=<:name:xxx>
-progress_mix=<:name:xxx>
-progress_fill=<:name:xxx>
-progress_end=<:name:xxx>
-progress_fill_end=<:name:xxx>
-progress_start_0=<:name:xxx>
+
+[llm]
+BASE_URL=xxx
+API_KEY=xxx
+DEFAULT_MODEL=xxx
+
+[langfuse]
+PUBLIC_KEY=xxx
+SECRET_KEY=xxx
+HOST=xxx
 ```
 
-2. Use [scripts/mygo-ave-preprocess.sh](scripts/mygo-ave-preprocess.sh) preprocess the video
+Environment variables can also be used:
+- `BOT_TOKEN`, `BOT_CLIENT_ID`
+- `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_DEFAULT_MODEL`
+- `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`
 
-3. Use `docker compose up -d` to start your service
+2. Upload emojis to your Discord application with these names:
+   - `success`, `error`, `youtube`
+   - `progress_start`, `progress`, `progress_mix`, `progress_fill`
+   - `progress_end`, `progress_fill_end`, `progress_start_0`
+
+3. Use [scripts/mygo-ave-preprocess.sh](scripts/mygo-ave-preprocess.sh) preprocess the video
+
+4. Use `docker compose up -d` to start your service
 
 ```yml
 services:

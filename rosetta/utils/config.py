@@ -1,37 +1,58 @@
-import configparser
-import os
+from pydantic_settings import BaseSettings
 
-config = configparser.ConfigParser()
-config.read("config.ini")
 
 # Bot config - prefer environment variables, fallback to config.ini
-TOKEN = os.environ.get("BOT_TOKEN") or config.get("bot", "TOKEN", fallback=None)
-CLIENT_ID = os.environ.get("BOT_CLIENT_ID") or config.get("bot", "CLIENT_ID", fallback=None)
+class BotSetting(BaseSettings):
+    TOKEN: str | None = None
+    CLIENT_ID: str | None = None
+    DEBUG: bool = False
+
+    class Config:
+        env_prefix = "BOT_"
 
 
-# LLM config - prefer environment variables, fallback to config.ini
-class LLMConfig:
-    @staticmethod
-    def get(key: str) -> str | None:
-        env_map = {
-            "BASE_URL": "LLM_BASE_URL",
-            "API_KEY": "LLM_API_KEY",
-            "DEFAULT_MODEL": "LLM_DEFAULT_MODEL",
-        }
-        env_key = env_map.get(key)
-        if env_key and os.environ.get(env_key):
-            return os.environ.get(env_key)
-        if config.has_section("llm"):
-            return config.get("llm", key, fallback=None)
-        return None
+# Emoji config - fetched from application emojis at startup
+class EmojiSetting(BaseSettings):
+    model_config = {"extra": "allow"}
+
+    def set_emojis(self, emojis: dict[str, str]):
+        for key, value in emojis.items():
+            object.__setattr__(self, key, value)
+
+    def get(self, key: str) -> str:
+        return getattr(self, key, "")
 
 
-LLM = LLMConfig()
+# LLM config - prefer environment variables
+class LLMSetting(BaseSettings):
+    BASE_URL: str | None = None
+    API_KEY: str | None = None
+    DEFAULT_MODEL: str | None = None
 
-# Langfuse config - prefer environment variables, fallback to config.ini
-if os.environ.get("LANGFUSE_PUBLIC_KEY"):
-    pass  # Already set in environment
-elif config.has_section("langfuse"):
-    os.environ.setdefault("LANGFUSE_PUBLIC_KEY", config["langfuse"].get("PUBLIC_KEY"))
-    os.environ.setdefault("LANGFUSE_SECRET_KEY", config["langfuse"].get("SECRET_KEY"))
-    os.environ.setdefault("LANGFUSE_HOST", config["langfuse"].get("HOST"))
+    class Config:
+        env_prefix = "LLM_"
+
+
+# Lavalink config - prefer environment variables
+class LavalinkSetting(BaseSettings):
+    # Set to "k8s" to enable Kubernetes service discovery, "local" for local development
+    DISCOVERY_MODE: str = "local"
+
+    # Local development settings
+    HOST: str = "127.0.0.1"
+    PORT: int = 2333
+    PASSWORD: str = "youshallnotpass"
+
+    # Kubernetes discovery settings
+    K8S_NAMESPACE: str = "default"
+    K8S_SERVICE_NAME: str = "lavalink"
+    K8S_SERVICE_PORT: int = 2333
+
+    class Config:
+        env_prefix = "LAVALINK_"
+
+
+BotConfig = BotSetting()
+EmojiConfig = EmojiSetting()
+LLMConfig = LLMSetting()
+LavalinkConfig = LavalinkSetting()
