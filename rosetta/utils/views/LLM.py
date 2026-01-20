@@ -9,7 +9,7 @@ SAFE_SPLIT_LIMIT = 3900
 
 
 class LLMView(discord.ui.LayoutView):
-    def __init__(self, model: str):
+    def __init__(self, model: str, image_url: str | None = None):
         super().__init__(timeout=300)
         self.last_update_time = time.time()
         self.start_time, self.first_token_time, self.end_time = time.time(), None, None
@@ -18,13 +18,19 @@ class LLMView(discord.ui.LayoutView):
         self.current_message_content = ""
         self.full_response = ""
         self.model = model
+        self.image_url = image_url
         self.current_page = 1
         self.message: discord.WebhookMessage | None = None
+        self.cancelled = False
 
         self.usage = None
         self.ttft, self.tps, self.completion_tokens = 0.0, 0.0, 0
 
         self.add_item(discord.ui.TextDisplay(f"🧠 Thinking with `{model}`..."))
+
+    async def cancel_callback(self, interaction: discord.Interaction):
+        self.cancelled = True
+        await interaction.response.defer()
 
     def find_best_split_position(self, text: str, max_len: int) -> int:
         """
@@ -87,10 +93,26 @@ class LLMView(discord.ui.LayoutView):
         container = discord.ui.Container()
         total_pages = len(self.response_messages)
 
+        # Show attached image at the top if present
+        if self.image_url:
+            container.add_item(
+                discord.ui.MediaGallery(
+                    discord.components.MediaGalleryItem(media=self.image_url)
+                )
+            )
+
         # page -1 means show current streaming content only
         if page == -1:
             current_message = self.current_message_content + " █"
             container.add_item(discord.ui.TextDisplay(current_message))
+            # Add cancel button during streaming
+            cancel_row = discord.ui.ActionRow()
+            cancel_button = discord.ui.Button(
+                label="Cancel", style=discord.ButtonStyle.danger, custom_id="cancel"
+            )
+            cancel_button.callback = self.cancel_callback
+            cancel_row.add_item(cancel_button)
+            container.add_item(cancel_row)
         elif total_pages > 0 and 1 <= page <= total_pages:
             # Show only the specified page's content (1 response message per page)
             page_content = self.response_messages[page - 1]
@@ -101,9 +123,10 @@ class LLMView(discord.ui.LayoutView):
             container.add_item(
                 discord.ui.Separator(spacing=discord.enums.SeparatorSpacing.small)
             )
+            status = "Cancelled" if self.cancelled else f"{self.tps:.2f} tps"
             container.add_item(
                 discord.ui.TextDisplay(
-                    f"-# {self.model} • {self.tps:.2f} tps • TTFT: {self.ttft:.2f}s • Tokens: {self.completion_tokens}"
+                    f"-# {self.model} • {status} • TTFT: {self.ttft:.2f}s • Tokens: {self.completion_tokens}"
                 )
             )
 

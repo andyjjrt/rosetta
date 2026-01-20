@@ -51,17 +51,44 @@ class LLM(Cog):
         await interaction.response.send_message(embed=embed)
 
     @llm_group.command(name="chat", description="Chat with a model")
-    @app_commands.describe(prompt="Your prompt", model="Model to use")
+    @app_commands.describe(
+        prompt="Your prompt",
+        image="Image attachment for vision models",
+        model="Model to use",
+    )
     @app_commands.autocomplete(model=get_models_autocomplete)
     async def chat(
         self,
         interaction: discord.Interaction,
-        prompt: str,
+        prompt: str = None,
+        image: discord.Attachment = None,
         model: str = None,
     ):
+        # Validate that at least prompt or image is provided
+        if not prompt and image is None:
+            await interaction.response.send_message(
+                "Please provide a prompt or an image.", ephemeral=True
+            )
+            return
+
         if model is None:
-            model = LLMConfig.get("DEFAULT_MODEL")
+            model = LLMConfig.DEFAULT_MODEL
         await interaction.response.defer()
+
+        # Build user message content - supports multimodal (text + image)
+        if image is not None:
+            # Validate image attachment
+            if not image.content_type or not image.content_type.startswith("image/"):
+                await interaction.followup.send(
+                    "The attachment must be an image file.", ephemeral=True
+                )
+                return
+            user_content = [
+                {"type": "text", "text": prompt or ""},
+                {"type": "image_url", "image_url": {"url": image.url}},
+            ]
+        else:
+            user_content = prompt
 
         user_id = str(interaction.user.id)
         with langfuse_client.start_as_current_span(
@@ -76,10 +103,11 @@ class LLM(Cog):
                     "guild_id": str(interaction.guild.id)
                     if interaction.guild
                     else "DM",
+                    "has_image": image is not None,
                 },
             )
 
-            view = LLMView(model)
+            view = LLMView(model, image_url=image.url if image else None)
             message = await interaction.followup.send(view=view, wait=True)
             try:
                 stream = await client.chat.completions.create(
@@ -89,13 +117,16 @@ class LLM(Cog):
                             "role": "system",
                             "content": "You are a helpful assistant on Discord, skilled in formatting your output with markdown.",
                         },
-                        {"role": "user", "content": prompt},
+                        {"role": "user", "content": user_content},
                     ],
                     stream=True,
-                    stream_options={"include_usage": True}
+                    stream_options={"include_usage": True},
                 )
 
                 async for chunk in stream:
+                    if view.cancelled:
+                        await stream.close()
+                        break
                     await view.update_chunk(message, chunk)
                 await view.end_chunk(message)
 
