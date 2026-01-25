@@ -5,7 +5,7 @@ from functools import partial
 import discord
 import pomice
 from discord import app_commands
-from discord.ext import commands, tasks
+from discord.ext import commands
 
 from ..utils.cog import Cog
 from ..utils.config import LavalinkConfig
@@ -120,51 +120,26 @@ class Music(Cog):
         super().__init__(bot)
         self.pomice = pomice.NodePool()
         asyncio.create_task(self.start_nodes())
-        self.sync_nodes.start()
 
-    def cog_unload(self):
-        self.sync_nodes.cancel()
+    @commands.command(name="reload_nodes")
+    @commands.is_owner()
+    async def reload_nodes(self, ctx: commands.Context):
+        """Reload Lavalink nodes by removing all and re-registering. (Owner only)"""
+        self._logger.info("Reloading Lavalink nodes...")
+        await ctx.send("🔄 Reloading Lavalink nodes...")
 
-    @tasks.loop(minutes=1)
-    async def sync_nodes(self):
-        """Sync Lavalink nodes every minute to detect new/removed nodes."""
-        if LavalinkConfig.DISCOVERY_MODE != "k8s":
-            return
-
-        self._logger.debug("Syncing Lavalink nodes...")
-        discovered_nodes = get_nodes()
-        discovered_ids = {node["identifier"] for node in discovered_nodes}
-        current_ids = {node.identifier for node in self.pomice.nodes}
-
-        # Add new nodes
-        for node in discovered_nodes:
-            if node["identifier"] not in current_ids:
-                try:
-                    await self.pomice.create_node(
-                        bot=self.bot,
-                        host=node["host"],
-                        port=node["port"],
-                        password=node["password"],
-                        identifier=node["identifier"],
-                    )
-                    self._logger.info(
-                        f"Added new Lavalink node '{node['identifier']}' at {node['host']}:{node['port']}"
-                    )
-                except Exception as e:
-                    self._logger.error(f"Failed to add node '{node['identifier']}': {e}")
-
-        # Remove nodes that no longer exist
+        # Remove all existing nodes
         for node in list(self.pomice.nodes):
-            if node.identifier not in discovered_ids:
-                try:
-                    await node.disconnect()
-                    self._logger.info(f"Removed Lavalink node '{node.identifier}'")
-                except Exception as e:
-                    self._logger.error(f"Failed to remove node '{node.identifier}': {e}")
+            try:
+                await node.disconnect()
+                self._logger.info(f"Removed Lavalink node '{node}'")
+            except Exception as e:
+                self._logger.error(f"Failed to remove node '{node}': {e}")
 
-    @sync_nodes.before_loop
-    async def before_sync_nodes(self):
-        await self.bot.wait_until_ready()
+        # Re-register nodes
+        await self.start_nodes()
+
+        await ctx.send(f"✅ Node reload complete. Total nodes: {len(self.pomice.nodes)}")
 
     async def start_nodes(self):
         """
