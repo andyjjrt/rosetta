@@ -9,7 +9,7 @@ SAFE_SPLIT_LIMIT = 3900
 
 
 class LLMView(discord.ui.LayoutView):
-    def __init__(self, model: str, image_url: str | None = None):
+    def __init__(self, model: str, prompt: str = "", image_url: str | None = None):
         super().__init__(timeout=300)
         self.last_update_time = time.time()
         self.start_time, self.first_token_time, self.end_time = time.time(), None, None
@@ -18,6 +18,7 @@ class LLMView(discord.ui.LayoutView):
         self.current_message_content = ""
         self.full_response = ""
         self.model = model
+        self.prompt = prompt
         self.image_url = image_url
         self.current_page = 1
         self.message: discord.WebhookMessage | None = None
@@ -26,7 +27,28 @@ class LLMView(discord.ui.LayoutView):
         self.usage = None
         self.ttft, self.tps, self.completion_tokens = 0.0, 0.0, 0
 
-        self.add_item(discord.ui.TextDisplay(f"🧠 Thinking with `{model}`..."))
+        # Initial loading state
+        self.container = self.construct_loading_container()
+        self.add_item(self.container)
+
+    def construct_loading_container(self) -> discord.ui.Container:
+        container = discord.ui.Container()
+        
+        # Show attached image at the top if present
+        if self.image_url:
+            container.add_item(
+                discord.ui.MediaGallery(
+                    discord.components.MediaGalleryItem(media=self.image_url)
+                )
+            )
+        
+        container.add_item(discord.ui.TextDisplay(f"🧠 Thinking with `{self.model}`..."))
+        if self.prompt:
+            truncated_prompt = self.prompt[:100] + ('...' if len(self.prompt) > 100 else '')
+            container.add_item(
+                discord.ui.TextDisplay(f"-# Prompt: {truncated_prompt}")
+            )
+        return container
 
     async def cancel_callback(self, interaction: discord.Interaction):
         self.cancelled = True

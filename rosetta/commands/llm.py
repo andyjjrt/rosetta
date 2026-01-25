@@ -6,11 +6,17 @@ from langfuse import get_client, openai
 from ..utils.cog import Cog
 from ..utils.config import LLMConfig
 from ..utils.embeds import InfoEmbed
+from ..utils.views.Image import ImageView
 from ..utils.views.LLM import LLMView
 
 client = openai.AsyncOpenAI(
     base_url=LLMConfig.BASE_URL,
     api_key=LLMConfig.API_KEY,
+)
+
+image_client = openai.AsyncOpenAI(
+    base_url=LLMConfig.BASE_URL,
+    api_key=LLMConfig.IMAGE_API_KEY,
 )
 
 langfuse_client = get_client()
@@ -23,6 +29,14 @@ SAFE_SPLIT_LIMIT = 1980
 async def get_models_autocomplete(
     interaction: discord.Interaction, current: str
 ) -> list[app_commands.Choice[str]]:
+    # Only show all models to bot owner, others get default model only
+    is_owner = await interaction.client.is_owner(interaction.user)
+    if not is_owner:
+        default_model = LLMConfig.DEFAULT_MODEL
+        if default_model and current.lower() in default_model.lower():
+            return [app_commands.Choice(name=default_model, value=default_model)]
+        return []
+    
     models_list = await client.models.list()
     models = [m.id for m in models_list.data]
     return [app_commands.Choice(name=m, value=m) for m in models if current in m][:25]
@@ -54,7 +68,7 @@ class LLM(Cog):
     @app_commands.describe(
         prompt="Your prompt",
         image="Image attachment for vision models",
-        model="Model to use",
+        model="Model to use (owner only)",
     )
     @app_commands.autocomplete(model=get_models_autocomplete)
     async def chat(
@@ -71,7 +85,9 @@ class LLM(Cog):
             )
             return
 
-        if model is None:
+        # Only bot owner can select model, others use default
+        is_owner = await self.bot.is_owner(interaction.user)
+        if model is None or not is_owner:
             model = LLMConfig.DEFAULT_MODEL
         await interaction.response.defer()
 
@@ -107,7 +123,7 @@ class LLM(Cog):
                 },
             )
 
-            view = LLMView(model, image_url=image.url if image else None)
+            view = LLMView(model, prompt=prompt or "", image_url=image.url if image else None)
             message = await interaction.followup.send(view=view, wait=True)
             try:
                 stream = await client.chat.completions.create(
@@ -134,3 +150,89 @@ class LLM(Cog):
                 raise e
 
             root_span.update(output=view.full_response)
+
+    @llm_group.command(name="image", description="Generate an image from a prompt [Admin only currently]")
+    @commands.is_owner()
+    @app_commands.describe(
+        prompt="Description of the image to generate",
+        size="Image size",
+        num_inference_steps="Number of inference steps (default: 9)",
+        true_cfg_scale="CFG scale (default: 4.0)",
+        seed="Random seed for reproducibility",
+    )
+    @app_commands.choices(
+        size=[
+            app_commands.Choice(name="720x480", value="720x480"),
+            app_commands.Choice(name="1280x720", value="1280x720"),
+            app_commands.Choice(name="1024x1024", value="1024x1024"),
+            app_commands.Choice(name="1920x1080", value="1920x1080"),
+        ],
+    )
+    async def image_gen(
+        self,
+        interaction: discord.Interaction,
+        prompt: str,
+        size: str = "1280x720",
+        num_inference_steps: int = 9,
+        true_cfg_scale: float = 4.0,
+        seed: int = None,
+    ):
+        await interaction.response.defer()
+
+        view = ImageView(
+            model=LLMConfig.IMAGE_MODEL,
+            prompt=prompt,
+            size=size,
+            num_inference_steps=num_inference_steps,
+            true_cfg_scale=true_cfg_scale,
+            seed=seed,
+        )
+        message = await interaction.followup.send(view=view, wait=True)
+
+        extra_body = {
+            "num_inference_steps": num_inference_steps,
+            "true_cfg_scale": true_cfg_scale,
+        }
+        if seed is not None:
+            extra_body["seed"] = seed
+
+        user_id = str(interaction.user.id)
+        with langfuse_client.start_as_current_span(
+            name="discord-image-gen-command",
+            input=prompt,
+        ) as root_span:
+            root_span.update_trace(
+                user_id=user_id,
+                metadata={
+                    "discord_username": interaction.user.name,
+                    "channel_id": str(interaction.channel.id),
+                    "guild_id": str(interaction.guild.id)
+                    if interaction.guild
+                    else "DM",
+                    "model": LLMConfig.IMAGE_MODEL,
+                    "size": size,
+                    "num_inference_steps": num_inference_steps,
+                    "true_cfg_scale": true_cfg_scale,
+                    "seed": seed,
+                },
+            )
+
+            try:
+                response = await image_client.images.generate(
+                    model=LLMConfig.IMAGE_MODEL,
+                    prompt=prompt,
+                    size=size,
+                    extra_body=extra_body,
+                )
+
+                image_b64 = response.data[0].b64_json
+                view.set_image(image_b64)
+                
+                await view.update_result(message)
+                root_span.update(output="Image generated successfully")
+
+            except Exception as e:
+                self._logger.error(e)
+                view.set_error(str(e))
+                await view.update_result(message)
+                root_span.update(output=f"Error: {str(e)}")
