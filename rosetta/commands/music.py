@@ -129,12 +129,12 @@ class Music(Cog):
         await ctx.send("🔄 Reloading Lavalink nodes...")
 
         # Remove all existing nodes
-        for node in list(self.pomice.nodes):
+        for node_name, node in self.pomice.nodes.items():
             try:
                 await node.disconnect()
-                self._logger.info(f"Removed Lavalink node '{node}'")
+                self._logger.info(f"Removed Lavalink node '{node_name}'")
             except Exception as e:
-                self._logger.error(f"Failed to remove node '{node}': {e}")
+                self._logger.error(f"Failed to remove node '{node_name}': {e}")
 
         # Re-register nodes
         await self.start_nodes()
