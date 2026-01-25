@@ -152,7 +152,6 @@ class LLM(Cog):
             root_span.update(output=view.full_response)
 
     @llm_group.command(name="image", description="Generate an image from a prompt [Admin only currently]")
-    @commands.is_owner()
     @app_commands.describe(
         prompt="Description of the image to generate",
         size="Image size",
@@ -178,6 +177,8 @@ class LLM(Cog):
         seed: int = None,
     ):
         await interaction.response.defer()
+        if not await self.bot.is_owner(interaction.user):
+            raise commands.CommandError("The command is not available now")
 
         view = ImageView(
             model=LLMConfig.IMAGE_MODEL,
