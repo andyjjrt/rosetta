@@ -5,7 +5,7 @@ from functools import partial
 import discord
 import pomice
 from discord import app_commands
-from discord.ext import commands
+from discord.ext import commands, tasks
 
 from ..utils.cog import Cog
 from ..utils.config import LavalinkConfig
@@ -120,6 +120,51 @@ class Music(Cog):
         super().__init__(bot)
         self.pomice = pomice.NodePool()
         asyncio.create_task(self.start_nodes())
+        self.sync_nodes.start()
+
+    def cog_unload(self):
+        self.sync_nodes.cancel()
+
+    @tasks.loop(minutes=1)
+    async def sync_nodes(self):
+        """Sync Lavalink nodes every minute to detect new/removed nodes."""
+        if LavalinkConfig.DISCOVERY_MODE != "k8s":
+            return
+
+        self._logger.debug("Syncing Lavalink nodes...")
+        discovered_nodes = get_nodes()
+        discovered_ids = {node["identifier"] for node in discovered_nodes}
+        current_ids = {node.identifier for node in self.pomice.nodes}
+
+        # Add new nodes
+        for node in discovered_nodes:
+            if node["identifier"] not in current_ids:
+                try:
+                    await self.pomice.create_node(
+                        bot=self.bot,
+                        host=node["host"],
+                        port=node["port"],
+                        password=node["password"],
+                        identifier=node["identifier"],
+                    )
+                    self._logger.info(
+                        f"Added new Lavalink node '{node['identifier']}' at {node['host']}:{node['port']}"
+                    )
+                except Exception as e:
+                    self._logger.error(f"Failed to add node '{node['identifier']}': {e}")
+
+        # Remove nodes that no longer exist
+        for node in list(self.pomice.nodes):
+            if node.identifier not in discovered_ids:
+                try:
+                    await node.disconnect()
+                    self._logger.info(f"Removed Lavalink node '{node.identifier}'")
+                except Exception as e:
+                    self._logger.error(f"Failed to remove node '{node.identifier}': {e}")
+
+    @sync_nodes.before_loop
+    async def before_sync_nodes(self):
+        await self.bot.wait_until_ready()
 
     async def start_nodes(self):
         """
