@@ -29,8 +29,9 @@ jobs:
         run: uv run mkdocs build --strict
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
+          name: docs-site
           path: site
 
   deploy:
@@ -43,7 +44,7 @@ jobs:
       - name: Download artifact
         uses: actions/download-artifact@v4
         with:
-          name: github-pages
+          name: docs-site
           path: site
 
       - name: Deploy
