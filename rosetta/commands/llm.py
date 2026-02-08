@@ -124,7 +124,7 @@ class LLM(Cog):
             )
 
             view = LLMView(model, prompt=prompt or "", image_url=image.url if image else None)
-            message = await interaction.followup.send(view=view, wait=True)
+            message = await interaction.followup.send(view=view, wait=True, allowed_mentions=discord.AllowedMentions.none())
             try:
                 stream = await client.chat.completions.create(
                     model=model,
