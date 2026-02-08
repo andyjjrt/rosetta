@@ -121,6 +121,26 @@ class Music(Cog):
         self.pomice = pomice.NodePool()
         asyncio.create_task(self.start_nodes())
 
+    @commands.command(name="reload_nodes")
+    @commands.is_owner()
+    async def reload_nodes(self, ctx: commands.Context):
+        """Reload Lavalink nodes by removing all and re-registering. (Owner only)"""
+        self._logger.info("Reloading Lavalink nodes...")
+        await ctx.send("🔄 Reloading Lavalink nodes...")
+
+        # Remove all existing nodes
+        for node_name, node in self.pomice.nodes.items():
+            try:
+                await node.disconnect()
+                self._logger.info(f"Removed Lavalink node '{node_name}'")
+            except Exception as e:
+                self._logger.error(f"Failed to remove node '{node_name}': {e}")
+
+        # Re-register nodes
+        await self.start_nodes()
+
+        await ctx.send(f"✅ Node reload complete. Total nodes: {len(self.pomice.nodes)}")
+
     async def start_nodes(self):
         """
         Start Pomice nodes based on discovery mode.

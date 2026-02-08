@@ -28,6 +28,8 @@ class LLMSetting(BaseSettings):
     BASE_URL: str | None = None
     API_KEY: str | None = None
     DEFAULT_MODEL: str | None = None
+    IMAGE_API_KEY: str | None = None
+    IMAGE_MODEL: str = "dall-e-3"
 
     class Config:
         env_prefix = "LLM_"
