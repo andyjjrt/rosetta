@@ -1,0 +1,62 @@
+site_name: Rosetta
+site_description: A Discord bot with music playback, LLM chat, image generation, and MyGO anime GIF features.
+repo_url: https://github.com/andyjjrt/rosetta
+repo_name: andyjjrt/rosetta
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - content.code.copy
+    - content.tabs.link
+    - search.suggest
+    - search.highlight
+    - content.tooltips
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - tables
+  - attr_list
+  - md_in_html
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+nav:
+  - Home: index.md
+  - Guide:
+      - Getting Started: guide/getting-started.md
+      - Configuration: guide/configuration.md
+  - Commands:
+      - Music: commands/music.md
+      - LLM: commands/llm.md
+      - MyGO: commands/mygo.md
+      - Utilities: commands/utilities.md
+  - Deployment:
+      - Docker Compose: deployment/docker-compose.md
+      - Kubernetes: deployment/kubernetes.md
+      - Local Development: deployment/local-dev.md

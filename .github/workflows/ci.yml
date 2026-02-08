@@ -58,6 +58,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           name: v${{ steps.meta.outputs.version }}
           tag: v${{ steps.meta.outputs.version }}
+          prerelease: ${{ contains(github.ref, 'beta') }}
           body: |
             # v${{ steps.meta.outputs.version }}
 
