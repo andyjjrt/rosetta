@@ -1,11 +1,11 @@
 # Getting Started
 
-Rosetta is a Discord bot built with [discord.py](https://github.com/Rapptz/discord.py) and [Lavalink](https://github.com/lavalink-devs/Lavalink). It provides music playback, LLM-powered chat, image generation, and MyGO!!!!! anime GIF generation.
+Rosetta is a Discord bot built with [discord.py](https://github.com/Rapptz/discord.py). It provides music playback, LLM-powered chat, image generation, and MyGO!!!!! anime GIF generation.
 
 ## Tech Stack
 
 - **Python 3.12** with [discord.py](https://github.com/Rapptz/discord.py)
-- **Lavalink v4** via [Pomice](https://github.com/cloudwithax/pomice) for music playback
+- **Lavalink/Nodelink** support via [lava_lyra](https://github.com/cloudwithax/lava_lyra) for music playback
 - **OpenAI-compatible API** for LLM chat & image generation
 - **Langfuse** for LLM observability & tracing
 - **FFmpeg** + **ffmpeg-python** for GIF generation

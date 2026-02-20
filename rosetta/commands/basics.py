@@ -4,9 +4,10 @@ import sys
 from datetime import datetime
 
 import discord
-import pomice
 from discord import app_commands
 from discord.ext import commands
+
+from rosetta.utils.nodepool import HybridNodePool
 
 from ..utils.cog import Cog
 from ..utils.embeds import PingEmbed
@@ -17,6 +18,8 @@ class Basics(Cog):
     def __init__(self, bot: commands.Bot):
         super().__init__(bot=bot)
 
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.command(name="ping", description="Ping the bot")
     async def ping(self, interaction: discord.Interaction):
         voice_client: CustomPlayer | None = (
@@ -24,19 +27,22 @@ class Basics(Cog):
         )
         if voice_client:
             await interaction.response.send_message(
-                embed=PingEmbed(self.bot.user, voice_client.node.latency)
+                embed=PingEmbed(self.bot.user, voice_client.node.latency / 1000)
             )
         else:
             await interaction.response.send_message(
                 embed=PingEmbed(self.bot.user, self.bot.latency)
             )
 
+    @app_commands.allowed_installs(guilds=True, users=True)
+    @app_commands.allowed_contexts(guilds=True, dms=True, private_channels=True)
     @app_commands.command(name="version", description="Show version information")
     async def version(self, interaction: discord.Interaction):
+        await interaction.response.defer()
         embed = await self.generate_version_embed(
             interaction, is_admin=await self.bot.is_owner(interaction.user)
         )
-        await interaction.response.send_message(embed=embed)
+        await interaction.followup.send(embed=embed)
 
     @commands.is_owner()
     @commands.command(name="guilds", description="Show all guilds the bot is in")
@@ -125,20 +131,16 @@ class Basics(Cog):
 
             # Lavalink Node Information
             try:
-                node_pool = pomice.NodePool()
+                node_pool = HybridNodePool()
                 nodes = node_pool.nodes
 
                 if nodes:
                     node_info_lines = []
                     for node in nodes.values():
-                        status = (
-                            "🟢 Connected" if node.is_connected else "🔴 Disconnected"
-                        )
-                        latency_ms = (
-                            round(node.latency * 1000, 2) if node.latency else 0
-                        )
+                        status = "🟢" if node.is_connected else "🔴"
+                        latency_ms = round(node.latency, 2) if node.latency else 0
                         node_info_lines.append(
-                            f"- **{node._identifier}** {status} • {latency_ms}ms"
+                            f"- {status} **{node._identifier}** • {latency_ms}ms"
                         )
 
                     embed.add_field(

@@ -11,7 +11,7 @@ Run Rosetta from source for development and testing.
 
 ## Start Lavalink
 
-The dev compose file starts two Lavalink nodes on ports 2333 and 2334:
+The dev compose file starts three Nodelink nodes on ports 2333 ~ 2335:
 
 ```bash
 docker compose -f docker-compose.dev.yaml up -d
@@ -20,27 +20,36 @@ docker compose -f docker-compose.dev.yaml up -d
 ??? example "docker-compose.dev.yaml"
     ```yaml
     services:
-      lavalink:
-        image: ghcr.io/lavalink-devs/lavalink:4-alpine
-        container_name: lavalink
-        restart: unless-stopped
-        environment:
-          - _JAVA_OPTIONS=-Xmx6G
-        volumes:
-          - ./application.yml:/opt/Lavalink/application.yml
+      nodelink-1:
+        image: performanc/nodelink:3.6.0
+        container_name: nodelink-1
         ports:
-          - "2333:2333"
-
-      lavalink-1:
-        image: ghcr.io/lavalink-devs/lavalink:4-alpine
-        container_name: lavalink-1
-        restart: unless-stopped
+          - "2333:3000"
         environment:
-          - _JAVA_OPTIONS=-Xmx6G
-        volumes:
-          - ./application.yml:/opt/Lavalink/application.yml
+          # --- Server Configuration ---
+          NODELINK_SERVER_HOST: "0.0.0.0"
+          NODELINK_SERVER_PORT: "3000"
+          NODELINK_SERVER_PASSWORD: "youshallnotpass"
+      nodelink-2:
+        image: performanc/nodelink:3.6.0
+        container_name: nodelink-2
         ports:
-          - "2334:2333"
+          - "2334:3000"
+        environment:
+          # --- Server Configuration ---
+          NODELINK_SERVER_HOST: "0.0.0.0"
+          NODELINK_SERVER_PORT: "3000"
+          NODELINK_SERVER_PASSWORD: "youshallnotpass" # CHANGE THIS!
+      nodelink-3:
+        image: performanc/nodelink:3.6.0
+        container_name: nodelink-3
+        ports:
+          - "2335:3000"
+        environment:
+          # --- Server Configuration ---
+          NODELINK_SERVER_HOST: "0.0.0.0"
+          NODELINK_SERVER_PORT: "3000"
+          NODELINK_SERVER_PASSWORD: "youshallnotpass" # CHANGE THIS!
     ```
 
 ## Install Dependencies
@@ -93,7 +102,7 @@ rosetta/
     ├── config.py         # Pydantic settings (env vars)
     ├── embeds.py        # Discord embed templates
     ├── log.py           # Structured logging setup
-    ├── player.py        # Custom Pomice player with queue
+    ├── player.py        # Custom lava_lyra player with queue
     └── views/           # Interactive Discord UI views
         ├── Guilds.py
         ├── Image.py

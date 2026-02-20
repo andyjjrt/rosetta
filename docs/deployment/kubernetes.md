@@ -1,6 +1,6 @@
 # Kubernetes
 
-Rosetta supports automatic Lavalink node discovery via the Kubernetes Endpoints API. This is useful when running multiple Lavalink replicas behind a headless Service.
+Rosetta supports automatic Lavalink/Nodelink node discovery via the Kubernetes Endpoints API. This is useful when running multiple Lavalink/Nodelink replicas behind a headless Service.
 
 ## Architecture
 
@@ -154,7 +154,7 @@ When `LAVALINK_DISCOVERY_MODE=k8s`, Rosetta:
 
 1. Uses the Kubernetes API to read Endpoints for the configured service
 2. Extracts individual pod IPs from the endpoint subsets
-3. Connects to each Lavalink pod as a separate Pomice node
+3. Connects to each Lavalink pod as a separate lava_lyra node
 4. Logs each discovered node with its pod name and IP
 
 ## Runtime Management

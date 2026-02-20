@@ -2,7 +2,7 @@ import math
 from datetime import datetime
 from typing import List
 
-import pomice
+import lava_lyra
 from discord import Colour, Embed, User
 from openai.types.completion_usage import CompletionUsage
 
@@ -152,8 +152,10 @@ def LeaveEmbed(user: User):
     return embed
 
 
-def SearchEmbed(user: User, keyword: str, tracks: List[pomice.Track] | pomice.Playlist):
-    if isinstance(tracks, pomice.Playlist):
+def SearchEmbed(
+    user: User, keyword: str, tracks: List[lava_lyra.Track] | lava_lyra.Playlist
+):
+    if isinstance(tracks, lava_lyra.Playlist):
         tracks = tracks.tracks
     embed = Embed(
         title=f':mag: Search result of **"{keyword}"**',

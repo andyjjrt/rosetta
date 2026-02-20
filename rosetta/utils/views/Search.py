@@ -2,7 +2,7 @@ import logging
 from typing import TYPE_CHECKING, List
 
 import discord
-import pomice
+import lava_lyra
 from discord.ext import commands
 
 from rosetta.utils.log import LogContext, PydanticAdapter
@@ -21,7 +21,7 @@ class SearchView(discord.ui.LayoutView):
         self,
         bot: commands.Bot,
         keyword: str,
-        tracks: List[pomice.Track] | pomice.Playlist,
+        tracks: List[lava_lyra.Track] | lava_lyra.Playlist,
         accent_color: int = 0x229AE0,
     ):
         super().__init__(timeout=300)
@@ -30,7 +30,7 @@ class SearchView(discord.ui.LayoutView):
         self.accent_color = accent_color
         self.page_size = 5
 
-        if isinstance(tracks, pomice.Playlist):
+        if isinstance(tracks, lava_lyra.Playlist):
             self.tracks = tracks.tracks
         else:
             self.tracks = tracks

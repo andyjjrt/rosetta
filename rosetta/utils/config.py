@@ -36,7 +36,7 @@ class LLMSetting(BaseSettings):
 
 
 # Lavalink config - prefer environment variables
-class LavalinkSetting(BaseSettings):
+class LavaLinkSetting(BaseSettings):
     # Set to "k8s" to enable Kubernetes service discovery, "local" for local development
     DISCOVERY_MODE: str = "local"
 
@@ -57,4 +57,4 @@ class LavalinkSetting(BaseSettings):
 BotConfig = BotSetting()
 EmojiConfig = EmojiSetting()
 LLMConfig = LLMSetting()
-LavalinkConfig = LavalinkSetting()
+LavaLinkConfig = LavaLinkSetting()
