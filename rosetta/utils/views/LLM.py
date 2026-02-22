@@ -5,7 +5,7 @@ from openai.types.chat.chat_completion_chunk import ChatCompletionChunk
 
 UPDATE_INTERVAL_SECONDS = 1
 DISCORD_CHAR_LIMIT = 4000
-SAFE_SPLIT_LIMIT = 3900
+SAFE_SPLIT_LIMIT = 3700
 THINKING_DISPLAY_LIMIT = 500
 
 
@@ -35,7 +35,7 @@ class LLMView(discord.ui.LayoutView):
 
     def construct_loading_container(self) -> discord.ui.Container:
         container = discord.ui.Container()
-        
+
         # Show attached image at the top if present
         if self.image_url:
             container.add_item(
@@ -43,13 +43,15 @@ class LLMView(discord.ui.LayoutView):
                     discord.components.MediaGalleryItem(media=self.image_url)
                 )
             )
-        
-        container.add_item(discord.ui.TextDisplay(f"🧠 Thinking with `{self.model}`..."))
+
+        container.add_item(
+            discord.ui.TextDisplay(f"🧠 Thinking with `{self.model}`...")
+        )
         if self.prompt:
-            truncated_prompt = self.prompt[:100] + ('...' if len(self.prompt) > 100 else '')
-            container.add_item(
-                discord.ui.TextDisplay(f"-# Prompt: {truncated_prompt}")
+            truncated_prompt = self.prompt[:100] + (
+                "..." if len(self.prompt) > 100 else ""
             )
+            container.add_item(discord.ui.TextDisplay(f"-# Prompt: {truncated_prompt}"))
         return container
 
     async def cancel_callback(self, interaction: discord.Interaction):
@@ -65,14 +67,14 @@ class LLMView(discord.ui.LayoutView):
         if show_cursor:
             # Still actively thinking - show the tail
             if len(text) > THINKING_DISPLAY_LIMIT:
-                text = "..." + text[-(THINKING_DISPLAY_LIMIT - 3):]
+                text = "..." + text[-(THINKING_DISPLAY_LIMIT - 3) :]
         else:
             # Thinking complete - show the beginning
             if len(text) > THINKING_DISPLAY_LIMIT:
                 text = text[:THINKING_DISPLAY_LIMIT] + "..."
 
-        lines = text.split('\n')
-        quoted = '\n'.join(f'> {line}' for line in lines)
+        lines = text.split("\n")
+        quoted = "\n".join(f"> {line}" for line in lines)
         if show_cursor:
             quoted += " █"
         return quoted
@@ -152,7 +154,9 @@ class LLMView(discord.ui.LayoutView):
             if self.thinking_content:
                 is_still_thinking = not bool(self.current_message_content)
                 container.add_item(
-                    discord.ui.TextDisplay(self._format_thinking(show_cursor=is_still_thinking))
+                    discord.ui.TextDisplay(
+                        self._format_thinking(show_cursor=is_still_thinking)
+                    )
                 )
 
             if self.current_message_content:
@@ -193,7 +197,9 @@ class LLMView(discord.ui.LayoutView):
             container.add_item(
                 discord.ui.Separator(spacing=discord.enums.SeparatorSpacing.small)
             )
-            footer = discord.ui.TextDisplay(f"-# Page {self.current_page}/{total_pages}")
+            footer = discord.ui.TextDisplay(
+                f"-# Page {self.current_page}/{total_pages}"
+            )
             container.add_item(footer)
 
             actionrow = discord.ui.ActionRow()
@@ -204,7 +210,9 @@ class LLMView(discord.ui.LayoutView):
             actionrow.add_item(previous_button)
 
             next_button = discord.ui.Button(
-                label="Next", custom_id="next", disabled=self.current_page >= total_pages
+                label="Next",
+                custom_id="next",
+                disabled=self.current_page >= total_pages,
             )
             next_button.callback = self.pagination_callback(self.current_page)
             actionrow.add_item(next_button)
@@ -230,7 +238,7 @@ class LLMView(discord.ui.LayoutView):
 
         delta = chunk.choices[0].delta
         content = delta.content
-        reasoning = getattr(delta, 'reasoning_content', None)
+        reasoning = getattr(delta, "reasoning_content", None)
         self.usage = chunk.usage
 
         needs_update = False
@@ -246,9 +254,18 @@ class LLMView(discord.ui.LayoutView):
                 self.first_token_time = time.time()
             self.current_message_content += content
             self.full_response += content
-            if len(self.current_message_content) > SAFE_SPLIT_LIMIT:
+
+            # On the first page, thinking content is displayed alongside
+            # the response, so reduce the available space accordingly.
+            if not self.response_messages and self.thinking_content:
+                thinking_length = len(self._format_thinking(show_cursor=False))
+                effective_limit = max(SAFE_SPLIT_LIMIT - thinking_length, 500)
+            else:
+                effective_limit = SAFE_SPLIT_LIMIT
+
+            if len(self.current_message_content) > effective_limit:
                 split_pos = self.find_best_split_position(
-                    self.current_message_content, SAFE_SPLIT_LIMIT
+                    self.current_message_content, effective_limit
                 )
                 text_to_send, carry_over_text = (
                     self.current_message_content[:split_pos],
@@ -258,7 +275,10 @@ class LLMView(discord.ui.LayoutView):
                 self.current_message_content = carry_over_text.lstrip()
             needs_update = True
 
-        if needs_update and time.time() - self.last_update_time >= UPDATE_INTERVAL_SECONDS:
+        if (
+            needs_update
+            and time.time() - self.last_update_time >= UPDATE_INTERVAL_SECONDS
+        ):
             await self.update_view(message)
             self.last_update_time = time.time()
 

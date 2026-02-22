@@ -1,8 +1,13 @@
+import asyncio
+import json
+import logging
 import random
 from enum import Enum
 from typing import Generic, TypeVar
 
 from lava_lyra import NodePool, Player, Track
+
+logger = logging.getLogger("rosetta")
 
 T = TypeVar("T")
 
@@ -142,7 +147,148 @@ class CustomPlayer(Player):
         if node_identifier is not None and node is None:
             node = NodePool.get_node(identifier=node_identifier)
         super().__init__(client, channel, node=node)
+        self._loop = asyncio.get_event_loop()
+        self._task = None
         self.queue = Queue[Track]()
+
+    async def connect(self, *, timeout, reconnect, self_deaf=False, self_mute=False):
+        await super().connect(
+            timeout=timeout,
+            reconnect=reconnect,
+            self_deaf=self_deaf,
+            self_mute=self_mute,
+        )
+        # self._websocket = await client.connect(
+        #     f"{self.node._websocket_uri}/v4/websocket/voice/{self.channel.id}",
+        #     extra_headers=self.node._headers,
+        #     ping_interval=self.node._heartbeat,
+        # )
+
+        # if not self._task or self._task.done():
+        #     self._task = self._loop.create_task(self._listen())
+
+    async def _listen(self) -> None:
+        while True:
+            try:
+                async for raw in self._websocket:
+                    # Text frame: try JSON parse and dispatch
+                    if isinstance(raw, str):
+                        try:
+                            event = json.loads(raw)
+                            if getattr(self, "_log", None):
+                                self._log.debug(f"Voice WS event: {event}")
+
+                            handler = getattr(self, "on_voice_event", None)
+                            if callable(handler):
+                                try:
+                                    maybe_await = handler(event)
+                                    if hasattr(maybe_await, "__await__"):
+                                        await maybe_await
+                                except Exception as e:
+                                    if getattr(self, "_log", None):
+                                        self._log.error(
+                                            f"Error in on_voice_event handler: {e}"
+                                        )
+                            continue
+                        except Exception:
+                            if getattr(self, "_log", None):
+                                self._log.debug(f"Voice WS text parse failed: {raw}")
+
+                    # Binary frame: parse packet according to the provided format
+                    if isinstance(raw, (bytes, bytearray)):
+                        b = bytes(raw)
+                        try:
+                            if len(b) < 2:
+                                continue
+
+                            op = b[0]
+                            fmt = b[1]
+                            offset = 2
+
+                            # guild id
+                            if offset >= len(b):
+                                continue
+                            guild_len = b[offset]
+                            offset += 1
+                            if offset + guild_len > len(b):
+                                continue
+                            guild_id = b[offset : offset + guild_len].decode("utf-8")
+                            offset += guild_len
+
+                            # user id
+                            if offset >= len(b):
+                                continue
+                            user_len = b[offset]
+                            offset += 1
+                            if offset + user_len > len(b):
+                                continue
+                            user_id = b[offset : offset + user_len].decode("utf-8")
+                            offset += user_len
+
+                            # ssrc (4 bytes) and timestamp (4 bytes)
+                            if offset + 8 > len(b):
+                                continue
+                            ssrc = int.from_bytes(b[offset : offset + 4], "big")
+                            offset += 4
+                            timestamp = int.from_bytes(b[offset : offset + 4], "big")
+                            offset += 4
+
+                            payload = b[offset:]
+
+                            event = {
+                                "op": op,
+                                "format": fmt,
+                                "guild_id": guild_id,
+                                "user_id": user_id,
+                                "ssrc": ssrc,
+                                "timestamp": timestamp,
+                                "payload": payload,
+                            }
+
+                            if getattr(self, "_log", None):
+                                logger.info(
+                                    f"Voice WS binary event: op={op} user={user_id} bytes={len(payload)}"
+                                )
+
+                            # Dispatch generic handler
+                            handler = getattr(self, "on_voice_event", None)
+                            if callable(handler):
+                                try:
+                                    maybe_await = handler(event)
+                                    if hasattr(maybe_await, "__await__"):
+                                        await maybe_await
+                                except Exception as e:
+                                    if getattr(self, "_log", None):
+                                        self._log.error(
+                                            f"Error in on_voice_event handler: {e}"
+                                        )
+
+                            # Specific handling for op code 3 (audio payload)
+                            if op == 3:
+                                audio_handler = getattr(self, "on_voice_audio", None)
+                                if callable(audio_handler):
+                                    try:
+                                        maybe_await = audio_handler(
+                                            user_id, payload, ssrc, timestamp
+                                        )
+                                        if hasattr(maybe_await, "__await__"):
+                                            await maybe_await
+                                    except Exception as e:
+                                        if getattr(self, "_log", None):
+                                            self._log.error(
+                                                f"Error in on_voice_audio handler: {e}"
+                                            )
+
+                        except Exception as e:
+                            if getattr(self, "_log", None):
+                                self._log.error(
+                                    f"Failed parsing voice binary packet: {e}"
+                                )
+                            continue
+
+            except Exception as e:
+                if getattr(self, "_log", None):
+                    self._log.error(f"Voice websocket error: {e}")
 
     async def swap_node(self, new_node):
         """Handle swapping to a new node, pr is in pending"""
