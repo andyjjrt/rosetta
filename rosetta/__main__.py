@@ -4,7 +4,7 @@ import discord
 from discord.ext import commands
 
 from .commands import LLM, Basics, Music, Mygo
-from .utils.config import BotConfig, EmojiConfig
+from .utils.config import BotConfig, CogConfig, EmojiConfig
 from .utils.embeds import ErrorEmbed
 from .utils.log import LogContext, PydanticAdapter, setup_logging
 
@@ -73,10 +73,14 @@ async def on_app_command_error(
 
 
 async def setup_hook():
-    await bot.add_cog(Basics(bot))
-    await bot.add_cog(Music(bot))
-    await bot.add_cog(Mygo(bot))
-    await bot.add_cog(LLM(bot))
+    if not CogConfig.BASICS_DISABLE:
+        await bot.add_cog(Basics(bot))
+    if not CogConfig.MUSIC_DISABLE:
+        await bot.add_cog(Music(bot))
+    if not CogConfig.MYGO_DISABLE:
+        await bot.add_cog(Mygo(bot))
+    if not CogConfig.LLM_DISABLE:
+        await bot.add_cog(LLM(bot))
 
 
 bot.setup_hook = setup_hook

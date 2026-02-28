@@ -11,6 +11,17 @@ class BotSetting(BaseSettings):
         env_prefix = "BOT_"
 
 
+# Cog-specific disable flags
+class CogSetting(BaseSettings):
+    BASICS_DISABLE: bool = False
+    MUSIC_DISABLE: bool = False
+    MYGO_DISABLE: bool = False
+    LLM_DISABLE: bool = False
+
+    class Config:
+        env_prefix = "COG_"
+
+
 # Emoji config - fetched from application emojis at startup
 class EmojiSetting(BaseSettings):
     model_config = {"extra": "allow"}
@@ -58,3 +69,4 @@ BotConfig = BotSetting()
 EmojiConfig = EmojiSetting()
 LLMConfig = LLMSetting()
 LavaLinkConfig = LavaLinkSetting()
+CogConfig = CogSetting()
