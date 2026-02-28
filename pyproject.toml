@@ -5,7 +5,7 @@ description = "A discord music bot, with other cool stuffs"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "discord.py>=2.4.0",
+    "discord.py>=2.7.0",
     "ffmpeg-python>=0.2.0",
     "kubernetes>=31.0.0",
     "langfuse>=3.6.1",
