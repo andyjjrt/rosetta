@@ -28,7 +28,7 @@ class Mygo(Cog):
     ) -> List[app_commands.Choice[str]]:
         return [
             app_commands.Choice(
-                name=f"[{d['segment_id']}] {d['text']} ({d['episode']})",
+                name=f"[{d['segment_id']}] {d['text']} (S{d['season']}E{d['episode']})",
                 value=f"[{d['segment_id']}] {d['text']}",
             )
             for d in Mygo.data
@@ -40,7 +40,9 @@ class Mygo(Cog):
             fls = s.split("/")
             return float(fls[0]) / float(fls[1])
 
-        filename = os.path.join(self.FOLDER, f"{segment_data['episode']}.mp4")
+        filename = os.path.join(
+            self.FOLDER, f"{segment_data['season']}-{segment_data['episode']}.mp4"
+        )
 
         try:
             probe_m = ffmpeg.probe(filename=filename)
