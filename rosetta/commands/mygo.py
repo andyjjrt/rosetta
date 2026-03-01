@@ -22,7 +22,6 @@ class Mygo(Cog):
         super().__init__(bot=bot)
         with open(os.path.join(self.FOLDER, "data.json")) as f:
             Mygo.data = json.load(f)
-       
 
     async def text_autocomplete(
         self, interaction: discord.Interaction, current: str
@@ -43,7 +42,19 @@ class Mygo(Cog):
 
         filename = os.path.join(self.FOLDER, f"{segment_data['episode']}.mp4")
 
-        probe_m = ffmpeg.probe(filename=filename)
+        try:
+            probe_m = ffmpeg.probe(filename=filename)
+        except ffmpeg.Error as e:
+            stderr_output = (
+                e.stderr.decode("utf-8", errors="replace")
+                if e.stderr
+                else "(no stderr)"
+            )
+            self._logger.error(f"ffprobe failed for '{filename}':\n{stderr_output}")
+            raise commands.CommandError(
+                f"ffprobe failed for `{filename}`: {stderr_output[:200]}"
+            )
+
         seek: float = float(
             min(segment_data["frame_start"], segment_data["frame_end"])
         ) / fps(probe_m["streams"][0]["r_frame_rate"])
@@ -75,6 +86,17 @@ class Mygo(Cog):
         )
 
         stdout, stderr = await process.communicate()
+
+        if process.returncode != 0:
+            stderr_output = (
+                stderr.decode("utf-8", errors="replace") if stderr else "(no stderr)"
+            )
+            self._logger.error(
+                f"ffmpeg GIF generation failed for '{filename}' (exit {process.returncode}):\n{stderr_output}"
+            )
+            raise commands.CommandError(
+                f"ffmpeg failed (exit {process.returncode}): {stderr_output[:200]}"
+            )
 
         gif_buffer = io.BytesIO()
 
