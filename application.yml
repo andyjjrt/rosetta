@@ -7,16 +7,19 @@ plugins:
     allowSearch: true # Whether "ytsearch:" and "ytmsearch:" can be used.
     allowDirectVideoIds: true # Whether just video IDs can match. If false, only complete URLs will be loaded.
     allowDirectPlaylistIds: true # Whether just playlist IDs can match. If false, only complete URLs will be loaded.
-    # The clients to use for track loading. See below for a list of valid clients.
-    # Clients are queried in the order they are given (so the first client is queried first and so on...)
-    clients:
-      - MUSIC
-      - ANDROID_VR
-      - WEB
-      - WEBEMBEDDED 
+    # # The clients to use for track loading. See below for a list of valid clients.
+    # # Clients are queried in the order they are given (so the first client is queried first and so on...)
+    # clients:
+    #   - MUSIC
+    #   - ANDROID_VR
+    #   - WEB
+    #   - WEBEMBEDDED
+    remoteCipher:
+      url: "https://cipher.kikkia.dev/"
 lavalink:
   plugins:
-    - dependency: "dev.lavalink.youtube:youtube-plugin:1.16.0"
+    - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.1"
+      repository: "https://maven.lavalink.dev/releases"
       snapshot: false
   server:
     password: "youshallnotpass"

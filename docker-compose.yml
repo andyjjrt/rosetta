@@ -1,7 +1,33 @@
 services:
   rosetta:
     image: ghcr.io/andyjjrt/rosetta:latest
+    restart: unless-stopped
+    depends_on:
+      lavalink:
+        condition: service_started
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN}
+      BOT_CLIENT_ID: ${BOT_CLIENT_ID}
+      BOT_DEBUG: ${BOT_DEBUG:-false}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_DEFAULT_MODEL: ${LLM_DEFAULT_MODEL:-}
+      LLM_IMAGE_API_KEY: ${LLM_IMAGE_API_KEY:-}
+      LLM_IMAGE_MODEL: ${LLM_IMAGE_MODEL:-dall-e-3}
+      LAVALINK_HOST: lavalink
+      LAVALINK_PORT: 2333
+      LAVALINK_PASSWORD: ${LAVALINK_PASSWORD:-youshallnotpass}
+      LAVALINK_LOCAL_NODE_COUNT: 1
     volumes:
       - ./music:/app/music
-      - ./config.ini:/app/config.ini
       - ./mygo-ave-video:/app/mygo-ave-video
+
+  lavalink:
+    image: ghcr.io/lavalink-devs/lavalink:4.2.2-alpine
+    restart: unless-stopped
+    environment:
+      LAVALINK_SERVER_PASSWORD: ${LAVALINK_PASSWORD:-youshallnotpass}
+    expose:
+      - "2333"
+    volumes:
+      - ./application.yml:/opt/Lavalink/application.yml:ro
