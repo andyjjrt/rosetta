@@ -91,7 +91,7 @@ class HybridNodePool(NodePool):
                 port=LavaLinkConfig.PORT + i,
                 password=LavaLinkConfig.PASSWORD,
             )
-            for i in range(3)
+            for i in range(LavaLinkConfig.LOCAL_NODE_COUNT)
         ]
 
     def _get_nodes(self) -> list[NodeConfig]:
