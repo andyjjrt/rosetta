@@ -34,4 +34,7 @@ dist-ssr
 .venv
 .ruff_cache
 
+# Local agent artifacts
+.omo/
+
 config.ini
