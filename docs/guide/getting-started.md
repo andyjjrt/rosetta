@@ -5,7 +5,7 @@ Rosetta is a Discord bot built with [discord.py](https://github.com/Rapptz/disco
 ## Tech Stack
 
 - **Python 3.12** with [discord.py](https://github.com/Rapptz/discord.py)
-- **Lavalink** (default) via [lava-lyra](https://github.com/ParrotXray/lava-lyra) for music playback. [NodeLink](https://github.com/PerformanC/NodeLink) is documented separately as an alternative backend.
+- **Lavalink** via [lava-lyra](https://github.com/ParrotXray/lava-lyra) for music playback
 - **OpenAI-compatible API** for LLM chat & image generation
 - **Langfuse** for LLM observability & tracing
 - **FFmpeg** + **ffmpeg-python** for GIF generation

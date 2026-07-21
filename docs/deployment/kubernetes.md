@@ -1,6 +1,6 @@
 # Kubernetes
 
-Rosetta supports automatic Lavalink node discovery via the Kubernetes Endpoints API. Lavalink is the demonstrated default; any lava_lyra-compatible backend works identically. This is useful when running multiple replicas behind a headless Service.
+Rosetta supports automatic Lavalink node discovery via the Kubernetes Endpoints API. This is useful when running multiple Lavalink replicas behind a headless Service.
 
 ## Architecture
 

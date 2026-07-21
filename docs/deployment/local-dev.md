@@ -49,46 +49,10 @@ docker compose -f docker-compose.dev.yaml up -d
           com.docker.network.driver.mtu: "1280"
     ```
 
-### NodeLink Alternative
-
-If you prefer NodeLink, start two NodeLink 3.6.0 nodes instead:
+### Stop Lavalink
 
 ```bash
-docker compose -f docker-compose.nodelink.yaml up -d
-```
-
-??? example "docker-compose.nodelink.yaml — NodeLink alternative"
-    ```yaml
-    services:
-      nodelink:
-        image: performanc/nodelink:3.6.0
-        restart: unless-stopped
-        ports:
-          - "2333:3000"
-        environment:
-          NODELINK_SERVER_HOST: "0.0.0.0"
-          NODELINK_SERVER_PORT: "3000"
-          NODELINK_SERVER_PASSWORD: "youshallnotpass"
-
-      nodelink-1:
-        image: performanc/nodelink:3.6.0
-        restart: unless-stopped
-        ports:
-          - "2334:3000"
-        environment:
-          NODELINK_SERVER_HOST: "0.0.0.0"
-          NODELINK_SERVER_PORT: "3000"
-          NODELINK_SERVER_PASSWORD: "youshallnotpass"
-    ```
-
-### Stop Lavalink / NodeLink
-
-```bash
-# Stop Lavalink
 docker compose -f docker-compose.dev.yaml down
-
-# Or stop NodeLink
-docker compose -f docker-compose.nodelink.yaml down
 ```
 
 ## Install Dependencies

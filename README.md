@@ -6,7 +6,7 @@ A Discord bot with music playback, LLM chat, image generation, and MyGO anime GI
 
 ### 🎵 Music
 
-Powered by [Lavalink](https://github.com/lavalink-devs/Lavalink) via [lava-lyra](https://github.com/ParrotXray/lava-lyra). Supports Kubernetes-based Lavalink node discovery for multi-node setups. [NodeLink](https://github.com/PerformanC/NodeLink) is documented separately as an alternative backend.
+Powered by [Lavalink](https://github.com/lavalink-devs/Lavalink) via [lava-lyra](https://github.com/ParrotXray/lava-lyra). Supports Kubernetes-based Lavalink node discovery for multi-node setups.
 
 | Command | Description |
 |---------|-------------|
