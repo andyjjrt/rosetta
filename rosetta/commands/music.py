@@ -330,6 +330,7 @@ class Music(Cog):
             f"Track {track} ended in guild {player.guild.name} (Reason: {reason})"
         )
         if reason == "finished":
+            await player.stop()
             try:
                 next_track = player.queue.get()
                 if next_track:
