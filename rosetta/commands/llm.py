@@ -16,7 +16,7 @@ client = openai.AsyncOpenAI(
 
 image_client = openai.AsyncOpenAI(
     base_url=LLMConfig.BASE_URL,
-    api_key=LLMConfig.IMAGE_API_KEY,
+    api_key=LLMConfig.API_KEY,
 )
 
 langfuse_client = get_client()
@@ -36,7 +36,7 @@ async def get_models_autocomplete(
         if default_model and current.lower() in default_model.lower():
             return [app_commands.Choice(name=default_model, value=default_model)]
         return []
-    
+
     models_list = await client.models.list()
     models = [m.id for m in models_list.data]
     return [app_commands.Choice(name=m, value=m) for m in models if current in m][:25]
@@ -123,8 +123,12 @@ class LLM(Cog):
                 },
             )
 
-            view = LLMView(model, prompt=prompt or "", image_url=image.url if image else None)
-            message = await interaction.followup.send(view=view, wait=True, allowed_mentions=discord.AllowedMentions.none())
+            view = LLMView(
+                model, prompt=prompt or "", image_url=image.url if image else None
+            )
+            message = await interaction.followup.send(
+                view=view, wait=True, allowed_mentions=discord.AllowedMentions.none()
+            )
             try:
                 stream = await client.chat.completions.create(
                     model=model,
@@ -151,7 +155,10 @@ class LLM(Cog):
 
             root_span.update(output=view.full_response)
 
-    @llm_group.command(name="image", description="Generate an image from a prompt [Admin only currently]")
+    @llm_group.command(
+        name="image",
+        description="Generate an image from a prompt [Admin only currently]",
+    )
     @app_commands.describe(
         prompt="Description of the image to generate",
         size="Image size",
@@ -228,7 +235,7 @@ class LLM(Cog):
 
                 image_b64 = response.data[0].b64_json
                 view.set_image(image_b64)
-                
+
                 await view.update_result(message)
                 root_span.update(output="Image generated successfully")
 
