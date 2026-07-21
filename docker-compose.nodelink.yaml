@@ -1,6 +1,6 @@
 services:
   nodelink:
-    image: performanc/nodelink:3.6.0
+    image: performanc/nodelink:3.8.0
     restart: unless-stopped
     ports:
       - "2333:3000"
@@ -10,7 +10,7 @@ services:
       NODELINK_SERVER_PASSWORD: "youshallnotpass"
 
   nodelink-1:
-    image: performanc/nodelink:3.6.0
+    image: performanc/nodelink:3.8.0
     restart: unless-stopped
     ports:
       - "2334:3000"

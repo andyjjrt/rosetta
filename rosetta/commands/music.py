@@ -14,7 +14,8 @@ from ..utils.embeds import (
     ProcessingEmbed,
     SuccessEmbed,
 )
-from ..utils.player import CustomPlayer, LoopMode
+from ..utils.player import CustomPlayer
+from ..utils.queue import LoopMode
 from ..utils.views import NowPlayingView, SearchView
 
 
