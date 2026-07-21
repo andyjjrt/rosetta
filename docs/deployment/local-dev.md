@@ -11,46 +11,85 @@ Run Rosetta from source for development and testing.
 
 ## Start Lavalink
 
-The dev compose file starts three Nodelink nodes on ports 2333 ~ 2335:
+The dev compose file starts two Lavalink 4.2.2 nodes on ports 2333 and 2334:
+
+Its JVM uses IPv4 for media requests, and the Docker bridge MTU is pinned to 1280 to avoid unrouted IPv6 and PMTU black holes common under WSL, Hyper-V, and VPN networking.
 
 ```bash
 docker compose -f docker-compose.dev.yaml up -d
 ```
 
-??? example "docker-compose.dev.yaml"
+??? example "docker-compose.dev.yaml — Lavalink default"
     ```yaml
     services:
-      nodelink-1:
+      lavalink:
+        image: ghcr.io/lavalink-devs/lavalink:4.2.2-alpine
+        restart: unless-stopped
+        environment:
+          _JAVA_OPTIONS: "-Xmx6G -Djava.net.preferIPv4Stack=true"
+        volumes:
+          - ./application.yml:/opt/Lavalink/application.yml
+        ports:
+          - "2333:2333"
+
+      lavalink-1:
+        image: ghcr.io/lavalink-devs/lavalink:4.2.2-alpine
+        restart: unless-stopped
+        environment:
+          _JAVA_OPTIONS: "-Xmx6G -Djava.net.preferIPv4Stack=true"
+        volumes:
+          - ./application.yml:/opt/Lavalink/application.yml
+        ports:
+          - "2334:2333"
+
+    networks:
+      default:
+        driver: bridge
+        driver_opts:
+          com.docker.network.driver.mtu: "1280"
+    ```
+
+### NodeLink Alternative
+
+If you prefer NodeLink, start two NodeLink 3.6.0 nodes instead:
+
+```bash
+docker compose -f docker-compose.nodelink.yaml up -d
+```
+
+??? example "docker-compose.nodelink.yaml — NodeLink alternative"
+    ```yaml
+    services:
+      nodelink:
         image: performanc/nodelink:3.6.0
-        container_name: nodelink-1
+        restart: unless-stopped
         ports:
           - "2333:3000"
         environment:
-          # --- Server Configuration ---
           NODELINK_SERVER_HOST: "0.0.0.0"
           NODELINK_SERVER_PORT: "3000"
           NODELINK_SERVER_PASSWORD: "youshallnotpass"
-      nodelink-2:
+
+      nodelink-1:
         image: performanc/nodelink:3.6.0
-        container_name: nodelink-2
+        restart: unless-stopped
         ports:
           - "2334:3000"
         environment:
-          # --- Server Configuration ---
           NODELINK_SERVER_HOST: "0.0.0.0"
           NODELINK_SERVER_PORT: "3000"
-          NODELINK_SERVER_PASSWORD: "youshallnotpass" # CHANGE THIS!
-      nodelink-3:
-        image: performanc/nodelink:3.6.0
-        container_name: nodelink-3
-        ports:
-          - "2335:3000"
-        environment:
-          # --- Server Configuration ---
-          NODELINK_SERVER_HOST: "0.0.0.0"
-          NODELINK_SERVER_PORT: "3000"
-          NODELINK_SERVER_PASSWORD: "youshallnotpass" # CHANGE THIS!
+          NODELINK_SERVER_PASSWORD: "youshallnotpass"
     ```
+
+### Stop Lavalink / NodeLink
+
+```bash
+# Stop Lavalink
+docker compose -f docker-compose.dev.yaml down
+
+# Or stop NodeLink
+docker compose -f docker-compose.nodelink.yaml down
+```
 
 ## Install Dependencies
 
@@ -60,25 +99,11 @@ uv sync
 
 ## Environment Variables
 
-Set the required environment variables. You can export them or create a `.env` file:
+Copy the example file and set the required values. Rosetta loads `.env` from the current working directory, and exported variables take precedence:
 
 ```bash
-export BOT_TOKEN=your-bot-token
-export BOT_CLIENT_ID=your-client-id
-export BOT_DEBUG=true
-export LAVALINK_HOST=127.0.0.1
-export LAVALINK_PORT=2333
-export LAVALINK_PASSWORD=youshallnotpass
-
-# LLM (optional)
-export LLM_BASE_URL=https://api.example.com/v1
-export LLM_API_KEY=your-api-key
-export LLM_DEFAULT_MODEL=gpt-4
-
-# Langfuse (optional)
-export LANGFUSE_PUBLIC_KEY=pk-...
-export LANGFUSE_SECRET_KEY=sk-...
-export LANGFUSE_HOST=https://langfuse.example.com
+cp .env.example .env
+# Edit .env with your bot token, client ID, and optional integrations.
 ```
 
 ## Run the Bot
@@ -99,7 +124,7 @@ rosetta/
 │   └── mygo.py          # /mygo GIF generation
 └── utils/
     ├── cog.py           # Base cog class with logging
-    ├── config.py         # Pydantic settings (env vars)
+    ├── config.py        # Pydantic settings (env vars)
     ├── embeds.py        # Discord embed templates
     ├── log.py           # Structured logging setup
     ├── player.py        # Custom lava_lyra player with queue

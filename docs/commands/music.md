@@ -1,6 +1,6 @@
 # Music Commands
 
-Powered by [Lavalink](https://github.com/lavalink-devs/Lavalink) via [lava_lyra](https://github.com/cloudwithax/lava_lyra). Supports Kubernetes-based Lavalink node discovery for multi-node setups.
+Powered by [Lavalink](https://github.com/lavalink-devs/Lavalink) via [lava_lyra](https://github.com/ParrotXray/lava-lyra). Supports Kubernetes-based Lavalink node discovery for multi-node setups.
 
 ## `/play`
 

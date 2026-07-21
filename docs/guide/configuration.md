@@ -1,6 +1,6 @@
 # Configuration
 
-All configuration is done via **environment variables**.
+All configuration uses **environment variables**. For local development, Rosetta also loads `.env` from the current working directory; exported variables take precedence over values in that file.
 
 ## Bot Settings
 
@@ -28,6 +28,7 @@ All configuration is done via **environment variables**.
 | `LAVALINK_HOST` | Lavalink host | `127.0.0.1` |
 | `LAVALINK_PORT` | Lavalink port | `2333` |
 | `LAVALINK_PASSWORD` | Lavalink password | `youshallnotpass` |
+| `LAVALINK_LOCAL_NODE_COUNT` | Number of sequential local nodes starting at `LAVALINK_PORT` (default: `2`, production: `1`, ignored in `k8s` mode) | `2` |
 
 ### Kubernetes Discovery
 
@@ -49,6 +50,8 @@ These are only needed when `LAVALINK_DISCOVERY_MODE=k8s`:
 
 ## Example `.env` File
 
+Copy `.env.example` to `.env`, then replace the placeholder values:
+
 ```bash
 # Bot
 BOT_TOKEN=your-bot-token
@@ -59,6 +62,7 @@ BOT_DEBUG=false
 LAVALINK_HOST=127.0.0.1
 LAVALINK_PORT=2333
 LAVALINK_PASSWORD=youshallnotpass
+LAVALINK_LOCAL_NODE_COUNT=2
 
 # LLM
 LLM_BASE_URL=https://api.example.com/v1

@@ -6,7 +6,7 @@ A Discord bot with music playback, LLM chat, image generation, and MyGO anime GI
 
 ### 🎵 Music
 
-Powered by [Lavalink](https://github.com/lavalink-devs/Lavalink) via [Pomice](https://github.com/cloudwithax/pomice). Supports Kubernetes-based Lavalink node discovery for multi-node setups.
+Powered by [Lavalink](https://github.com/lavalink-devs/Lavalink) via [lava-lyra](https://github.com/ParrotXray/lava-lyra). Supports Kubernetes-based Lavalink node discovery for multi-node setups. [NodeLink](https://github.com/PerformanC/NodeLink) is documented separately as an alternative backend.
 
 | Command | Description |
 |---------|-------------|
@@ -66,6 +66,7 @@ Configuration is done via **environment variables**:
 | `LAVALINK_HOST` | Lavalink host (default: `127.0.0.1`) |
 | `LAVALINK_PORT` | Lavalink port (default: `2333`) |
 | `LAVALINK_PASSWORD` | Lavalink password (default: `youshallnotpass`) |
+| `LAVALINK_LOCAL_NODE_COUNT` | Number of sequential local nodes (default: `2`, production: `1`, ignored in `k8s` mode) |
 | `LAVALINK_K8S_NAMESPACE` | Kubernetes namespace for Lavalink service discovery |
 | `LAVALINK_K8S_SERVICE_NAME` | Kubernetes service name for Lavalink |
 | `LAVALINK_K8S_SERVICE_PORT` | Kubernetes service port for Lavalink |
@@ -103,30 +104,37 @@ services:
   rosetta:
     image: ghcr.io/andyjjrt/rosetta:latest
     restart: unless-stopped
+    depends_on:
+      lavalink:
+        condition: service_started
     environment:
-      - BOT_TOKEN=your-bot-token
-      - BOT_CLIENT_ID=your-client-id
-      - LLM_BASE_URL=https://api.example.com/v1
-      - LLM_API_KEY=your-api-key
-      - LLM_DEFAULT_MODEL=gpt-4
-      - LAVALINK_HOST=lavalink
-      - LAVALINK_PORT=2333
-      - LAVALINK_PASSWORD=youshallnotpass
+      BOT_TOKEN: ${BOT_TOKEN}
+      BOT_CLIENT_ID: ${BOT_CLIENT_ID}
+      BOT_DEBUG: ${BOT_DEBUG:-false}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_DEFAULT_MODEL: ${LLM_DEFAULT_MODEL:-}
+      LLM_IMAGE_API_KEY: ${LLM_IMAGE_API_KEY:-}
+      LLM_IMAGE_MODEL: ${LLM_IMAGE_MODEL:-dall-e-3}
+      LAVALINK_HOST: lavalink
+      LAVALINK_PORT: 2333
+      LAVALINK_PASSWORD: ${LAVALINK_PASSWORD:-youshallnotpass}
+      LAVALINK_LOCAL_NODE_COUNT: 1
     volumes:
       - ./music:/app/music
       - ./mygo-ave-video:/app/mygo-ave-video
 
   lavalink:
-    image: ghcr.io/lavalink-devs/lavalink:4-alpine
+    image: ghcr.io/lavalink-devs/lavalink:4.2.2-alpine
     restart: unless-stopped
     environment:
-      - _JAVA_OPTIONS=-Xmx6G
+      LAVALINK_SERVER_PASSWORD: ${LAVALINK_PASSWORD:-youshallnotpass}
+    expose:
+      - "2333"
     volumes:
-      - ./application.yml:/opt/Lavalink/application.yml
-    ports:
-      - "2333:2333"
-```
+      - ./application.yml:/opt/Lavalink/application.yml:ro
 
+```
 ```bash
 docker compose up -d
 ```
@@ -203,16 +211,11 @@ Rosetta will automatically discover all Lavalink pod IPs and connect to each one
    uv sync
    ```
 
-3. **Set environment variables** (or create a `.env` file):
+3. **Create your local environment file** (shell environment variables still take precedence):
 
    ```bash
-   export BOT_TOKEN=your-bot-token
-   export BOT_CLIENT_ID=your-client-id
-   export BOT_DEBUG=true
-   export LAVALINK_HOST=127.0.0.1
-   export LAVALINK_PORT=2333
-   export LAVALINK_PASSWORD=youshallnotpass
-   # LLM / Langfuse variables as needed
+   cp .env.example .env
+   # Edit .env with your bot token, client ID, and optional integrations.
    ```
 
 4. **Run the bot**:
@@ -226,7 +229,7 @@ Rosetta will automatically discover all Lavalink pod IPs and connect to each one
 ## Tech Stack
 
 - **Python 3.12** with [discord.py](https://github.com/Rapptz/discord.py)
-- **Lavalink v4** via [Pomice](https://github.com/cloudwithax/pomice) for music playback
+- **Lavalink v4** via [lava-lyra](https://github.com/ParrotXray/lava-lyra) for music playback
 - **OpenAI-compatible API** for LLM chat & image generation
 - **Langfuse** for LLM observability & tracing
 - **FFmpeg** + **ffmpeg-python** for GIF generation
