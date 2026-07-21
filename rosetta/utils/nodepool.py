@@ -15,7 +15,7 @@ class HybridNodePool(NodePool):
 
     def _get_k8s_endpoints(self) -> list[NodeConfig]:
         """
-        Discover LavaLink/NodeLink nodes from Kubernetes Endpoints.
+        Discover Lavalink nodes from Kubernetes Endpoints.
         Returns a list of dicts with host, port, password, and identifier.
         """
         try:
