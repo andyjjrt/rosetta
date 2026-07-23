@@ -18,6 +18,14 @@ services:
       LAVALINK_PORT: 2333
       LAVALINK_PASSWORD: ${LAVALINK_PASSWORD:-youshallnotpass}
       LAVALINK_LOCAL_NODE_COUNT: 1
+      MCP_ENABLED: ${MCP_ENABLED:-false}
+      MCP_HOST: ${MCP_HOST:-0.0.0.0}
+      MCP_PORT: ${MCP_PORT:-8000}
+      MCP_PATH: ${MCP_PATH:-/mcp}
+      MCP_BEARER_TOKEN: ${MCP_BEARER_TOKEN:-}
+      MCP_ALLOWED_HOSTS: '${MCP_ALLOWED_HOSTS:-["127.0.0.1","localhost","rosetta"]}'
+    expose:
+      - "${MCP_PORT:-8000}"
     volumes:
       - ./music:/app/music
       - ./mygo-ave-video:/app/mygo-ave-video
