@@ -1,25 +1,23 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-from langfuse import get_client, openai
 
 from ..utils.cog import Cog
 from ..utils.config import LLMConfig
 from ..utils.embeds import InfoEmbed
+from ..utils.langfuse import TraceRequest, create_async_openai, trace_request
 from ..utils.views.Image import ImageView
 from ..utils.views.LLM import LLMView
 
-client = openai.AsyncOpenAI(
+client = create_async_openai(
     base_url=LLMConfig.BASE_URL,
     api_key=LLMConfig.API_KEY,
 )
 
-image_client = openai.AsyncOpenAI(
+image_client = create_async_openai(
     base_url=LLMConfig.BASE_URL,
     api_key=LLMConfig.API_KEY,
 )
-
-langfuse_client = get_client()
 
 UPDATE_INTERVAL_SECONDS = 1
 DISCORD_CHAR_LIMIT = 2000
@@ -107,11 +105,10 @@ class LLM(Cog):
             user_content = prompt
 
         user_id = str(interaction.user.id)
-        with langfuse_client.start_as_current_span(
-            name="discord-ask-command",
-            input=prompt,
-        ) as root_span:
-            root_span.update_trace(
+        with trace_request(
+            TraceRequest(
+                name="discord-ask-command",
+                input=prompt,
                 user_id=user_id,
                 metadata={
                     "discord_username": interaction.user.name,
@@ -122,7 +119,7 @@ class LLM(Cog):
                     "has_image": image is not None,
                 },
             )
-
+        ) as root_span:
             view = LLMView(
                 model, prompt=prompt or "", image_url=image.url if image else None
             )
@@ -153,7 +150,8 @@ class LLM(Cog):
             except Exception as e:
                 raise e
 
-            root_span.update(output=view.full_response)
+            if root_span is not None:
+                root_span.update(output=view.full_response)
 
     @llm_group.command(
         name="image",
@@ -205,11 +203,10 @@ class LLM(Cog):
             extra_body["seed"] = seed
 
         user_id = str(interaction.user.id)
-        with langfuse_client.start_as_current_span(
-            name="discord-image-gen-command",
-            input=prompt,
-        ) as root_span:
-            root_span.update_trace(
+        with trace_request(
+            TraceRequest(
+                name="discord-image-gen-command",
+                input=prompt,
                 user_id=user_id,
                 metadata={
                     "discord_username": interaction.user.name,
@@ -224,7 +221,7 @@ class LLM(Cog):
                     "seed": seed,
                 },
             )
-
+        ) as root_span:
             try:
                 response = await image_client.images.generate(
                     model=LLMConfig.IMAGE_MODEL,
@@ -237,10 +234,12 @@ class LLM(Cog):
                 view.set_image(image_b64)
 
                 await view.update_result(message)
-                root_span.update(output="Image generated successfully")
+                if root_span is not None:
+                    root_span.update(output="Image generated successfully")
 
             except Exception as e:
                 self._logger.error(e)
                 view.set_error(str(e))
                 await view.update_result(message)
-                root_span.update(output=f"Error: {str(e)}")
+                if root_span is not None:
+                    root_span.update(output=f"Error: {str(e)}")

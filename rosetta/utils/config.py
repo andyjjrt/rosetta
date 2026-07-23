@@ -49,6 +49,19 @@ class LLMSetting(BaseSettings):
     IMAGE_MODEL: str = "dall-e-3"
 
 
+class LangfuseSetting(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_prefix="LANGFUSE_",
+        extra="ignore",
+    )
+
+    PUBLIC_KEY: str | None = None
+    SECRET_KEY: str | None = None
+    HOST: str | None = None
+
+
 # Lavalink config - prefer environment variables
 class LavaLinkSetting(BaseSettings):
     model_config = SettingsConfigDict(
@@ -76,5 +89,6 @@ class LavaLinkSetting(BaseSettings):
 BotConfig = BotSetting()
 EmojiConfig = EmojiSetting()
 LLMConfig = LLMSetting()
+LangfuseConfig = LangfuseSetting()
 LavaLinkConfig = LavaLinkSetting()
 CogConfig = CogSetting()
