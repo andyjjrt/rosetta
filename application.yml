@@ -21,6 +21,9 @@ lavalink:
     - dependency: "dev.lavalink.youtube:youtube-plugin:1.18.1"
       repository: "https://maven.lavalink.dev/releases"
       snapshot: false
+    - dependency: "com.github.Devoxin:LavaDSPX-Plugin:0.0.5"
+      repository: "https://jitpack.io"
+      snapshot: false
   server:
     password: "youshallnotpass"
     sources:
