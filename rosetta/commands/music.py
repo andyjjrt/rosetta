@@ -1,11 +1,18 @@
 import asyncio
-from functools import partial
 
 import discord
 import lava_lyra
 from discord import app_commands
 from discord.ext import commands
 
+from rosetta.commands.music_playback import (
+    DiscordPlayRequest,
+    ensure_active_player,
+    ensure_voice_connection,
+    play_from_interaction,
+)
+from rosetta.models.music import MusicFailure
+from rosetta.utils.music_service import MusicService
 from rosetta.utils.nodepool import HybridNodePool
 
 from ..utils.cog import Cog
@@ -23,6 +30,7 @@ class Music(Cog):
     def __init__(self, bot: commands.Bot):
         super().__init__(bot)
         self.pool = HybridNodePool()
+        self.service = MusicService(bot, self.pool)
         asyncio.create_task(self.pool.create_nodes(bot))
 
     @commands.command(name="reload_nodes")
@@ -56,93 +64,11 @@ class Music(Cog):
         top: bool = False,
         node_name: str | None = None,
     ):
-        adapter = interaction.extras.get("logger")
-        player: CustomPlayer | None = (
-            interaction.guild.voice_client if interaction.guild else None
+        return await play_from_interaction(
+            self.pool,
+            self.service,
+            DiscordPlayRequest(interaction, url, loop, shuffle, top, node_name),
         )
-        if player is None:
-            if interaction.user.voice and interaction.user.voice.channel:
-                await self.pool.destroy_guild_players(
-                    interaction.user.voice.channel.guild.id
-                )
-                player_cls = (
-                    partial(CustomPlayer, node_identifier=node_name)
-                    if node_name
-                    else CustomPlayer
-                )
-                player: CustomPlayer = await interaction.user.voice.channel.connect(
-                    cls=player_cls
-                )
-
-        await player.set_volume(20)
-        normalization = lava_lyra.Filter(tag="play-normalization")
-        normalization.payload = {
-            "pluginFilters": {
-                "normalization": {
-                    "maxAmplitude": 0.05,
-                    "adaptive": True,
-                }
-            }
-        }
-        if not player.filters.has_filter(filter_tag=normalization.tag):
-            await player.add_filter(normalization)
-
-        results = await player.get_tracks(
-            query=f"{url}", search_type=lava_lyra.URLRegex.YOUTUBE_URL
-        )
-
-        if not results:
-            adapter.error(f"No results found for search term: {url}")
-            raise commands.CommandError("No results were found for that search term.")
-
-        if isinstance(results, lava_lyra.Playlist):
-            tracks = results.tracks
-            name = results.name
-            uri = results.uri
-            thumbnail = results.thumbnail
-            adapter.info(f"Enqueued playlist: {name} ({len(tracks)} tracks)")
-        else:
-            tracks = results
-            name = tracks[0].title
-            uri = tracks[0].uri
-            thumbnail = tracks[0].thumbnail
-            adapter.info(f"Enqueued track: {name}")
-
-        # top
-        if top:
-            player.queue.add_front(tracks)
-        else:
-            player.queue.add(tracks)
-
-        # shuffle
-        if shuffle:
-            player.queue.shuffle()
-
-        # loop
-        if loop == "Off":
-            player.queue.set_loop(LoopMode.NONE)
-        elif loop == "One":
-            player.queue.set_loop(LoopMode.ONE)
-        elif loop == "Queue":
-            player.queue.set_loop(LoopMode.QUEUE)
-        else:
-            raise NotImplementedError()
-
-        if not player.is_playing:
-            track = player.queue.get()
-            await player.play(track)
-
-        embed = SuccessEmbed(
-            interaction.user,
-            f"Enqueued [**{name}**]({uri})",
-        )
-        embed.set_footer(
-            text=f"{interaction.user.name} • {player.node._identifier}",
-            icon_url=interaction.user.avatar,
-        )
-        embed.set_thumbnail(url=thumbnail)
-
-        return embed
 
     @app_commands.command(name="play", description="Play Youtube music")
     @app_commands.allowed_installs(guilds=True, users=False)
@@ -212,9 +138,11 @@ class Music(Cog):
     async def search(self, interaction: discord.Interaction, keyword: str):
         adapter = interaction.extras.get("logger")
         await interaction.response.defer()
-        tracks = await self.pool.get_node().get_tracks(keyword)
+        result = await self.service.search(keyword)
+        if isinstance(result, MusicFailure):
+            raise commands.CommandError(result.message)
         adapter.info(f"Searched with keyword: {keyword}")
-        view = SearchView(self.bot, keyword, tracks)
+        view = SearchView(self.bot, keyword, result.tracks)
         await interaction.followup.send(view=view)
 
     async def do_shuffle(
@@ -320,23 +248,10 @@ class Music(Cog):
         )
 
     async def ensure_voice(self, interaction: discord.Interaction):
-        voice_client = interaction.guild.voice_client if interaction.guild else None
-        adapter = interaction.extras.get("logger")
-        if voice_client is None:
-            if not interaction.user.voice:
-                adapter.warning(
-                    f"User {interaction.user} not in voice channel in guild {interaction.guild.name}"
-                )
-                raise commands.CommandError("You are not connected to a voice channel.")
-        return voice_client
+        return await ensure_voice_connection(interaction)
 
     async def ensure_player(self, interaction: discord.Interaction) -> CustomPlayer:
-        player = interaction.guild.voice_client if interaction.guild else None
-        adapter = interaction.extras.get("logger")
-        if not player:
-            adapter.warning(f"Player not found for guild {interaction.guild.name}")
-            raise commands.CommandError("The bot is not playing")
-        return player
+        return await ensure_active_player(interaction)
 
     @commands.Cog.listener("on_lyra_track_end")
     async def on_lyra_track_end(

@@ -1,10 +1,12 @@
 import logging
-from typing import TYPE_CHECKING, List
+from collections.abc import Sequence
+from typing import TYPE_CHECKING
 
 import discord
 import lava_lyra
 from discord.ext import commands
 
+from rosetta.models.music import TrackSummary
 from rosetta.utils.log import LogContext, PydanticAdapter
 
 if TYPE_CHECKING:
@@ -21,7 +23,7 @@ class SearchView(discord.ui.LayoutView):
         self,
         bot: commands.Bot,
         keyword: str,
-        tracks: List[lava_lyra.Track] | lava_lyra.Playlist,
+        tracks: Sequence[TrackSummary | lava_lyra.Track] | lava_lyra.Playlist,
         accent_color: int = 0x229AE0,
     ):
         super().__init__(timeout=300)
@@ -33,7 +35,7 @@ class SearchView(discord.ui.LayoutView):
         if isinstance(tracks, lava_lyra.Playlist):
             self.tracks = tracks.tracks
         else:
-            self.tracks = tracks
+            self.tracks = list(tracks)
 
         self.container = self.construct_container()
         self.add_item(self.container)
@@ -48,6 +50,11 @@ class SearchView(discord.ui.LayoutView):
         minutes = seconds // 60
         seconds = seconds % 60
         return f"{minutes:02d}:{seconds:02d}"
+
+    def _duration_ms(self, track: TrackSummary | lava_lyra.Track) -> int:
+        if isinstance(track, TrackSummary):
+            return track.duration_ms
+        return track.length
 
     def pagination_callback(self, current_page: int = 1):
         async def _callback(interaction: discord.Interaction):
@@ -103,7 +110,7 @@ class SearchView(discord.ui.LayoutView):
 
         for i, track in enumerate(page_tracks, start=start_idx):
             track_detail = discord.ui.TextDisplay(
-                f"{i + 1}. [{track.title}]({track.uri}) `{self._format_time(track.length)}`"
+                f"{i + 1}. [{track.title}]({track.uri}) `{self._format_time(self._duration_ms(track))}`"
             )
             options.append(
                 discord.SelectOption(
