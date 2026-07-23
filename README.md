@@ -73,6 +73,85 @@ Configuration is done via **environment variables**:
 | `LANGFUSE_PUBLIC_KEY` | Langfuse public key |
 | `LANGFUSE_SECRET_KEY` | Langfuse secret key |
 | `LANGFUSE_HOST` | Langfuse host URL |
+| `MCP_ENABLED` | Enable the private MCP Streamable HTTP endpoint (`false` by default) |
+| `MCP_HOST` | Bind host for the MCP listener (default: `127.0.0.1`) |
+| `MCP_PORT` | Bind port for the MCP listener (default: `8000`) |
+| `MCP_PATH` | MCP mount path, starting with one `/` (default: `/mcp`) |
+| `MCP_BEARER_TOKEN` | Required bearer secret when MCP is enabled; at least 32 characters |
+| `MCP_ALLOWED_HOSTS` | JSON list of accepted HTTP Host values, e.g. `["127.0.0.1", "localhost"]` |
+
+### Private MCP search/play endpoint
+
+MCP is disabled by default and is intended only for a private operator network or sidecar path. It is not an internet-facing API boundary. When `MCP_ENABLED=true`, set a high-entropy `MCP_BEARER_TOKEN`; clients must send `Authorization: Bearer <token>`, and Rosetta rejects missing or wrong credentials with HTTP 401 before MCP dispatch. Shutdown is managed with the bot lifecycle, so closing Rosetta requests graceful Streamable HTTP listener cleanup.
+
+The endpoint is stable MCP v1 Streamable HTTP, stateless JSON, mounted at `http://<MCP_HOST>:<MCP_PORT><MCP_PATH>/`. It exposes exactly two tools:
+
+```json
+{
+  "search": {
+    "keyword": "string, trimmed, min length 1",
+    "limit": "integer, default 10, range 1..25"
+  },
+  "play": {
+    "user_id": "decimal string Discord user ID",
+    "voice_channel_id": "decimal string Discord voice channel ID",
+    "url": "string, trimmed, min length 1",
+    "loop": "Off | One | Queue, default Off",
+    "shuffle": "boolean, default false",
+    "top": "boolean, default false",
+    "node_name": "string or null, default null"
+  }
+}
+```
+
+`search` returns `{status:"success", ok:true, tracks:[{title, author, duration_ms, uri, thumbnail}]}`. Feed a returned `tracks[0].uri` to `play`; Discord IDs must stay JSON strings, not numbers. Expected music failures are structured tool results with `{status:"failure", ok:false, code, message}`. Common operator-relevant codes are `player_channel_conflict` when the guild player is already in another voice channel, `user_not_in_channel` when the requested user/channel do not match cached Discord voice state, and `music_backend_unavailable` when no Lavalink node is ready. Malformed tool input remains an MCP validation error.
+
+```python
+# mcp-client-snippet:start
+from __future__ import annotations
+
+from mcp import ClientSession
+from mcp.client.streamable_http import streamable_http_client
+
+
+async def run_mcp_search_play(
+    mcp_url: str,
+    bearer_token: str,
+    keyword: str,
+    user_id: str,
+    voice_channel_id: str,
+) -> dict[str, object]:
+    import httpx2
+
+    async with httpx2.AsyncClient(
+        headers={"Authorization": f"Bearer {bearer_token}"},
+        timeout=httpx2.Timeout(30.0, read=300.0),
+        follow_redirects=True,
+    ) as http_client:
+        async with streamable_http_client(
+            mcp_url,
+            http_client=http_client,
+        ) as (read_stream, write_stream, _session_id):
+            async with ClientSession(read_stream, write_stream) as session:
+                await session.initialize()
+                tools = await session.list_tools()
+                search = await session.call_tool("search", {"keyword": keyword})
+                uri = search.structuredContent["result"]["tracks"][0]["uri"]
+                play = await session.call_tool(
+                    "play",
+                    {
+                        "user_id": user_id,
+                        "voice_channel_id": voice_channel_id,
+                        "url": uri,
+                    },
+                )
+                return {
+                    "tools": [tool.name for tool in tools.tools],
+                    "search": search.structuredContent,
+                    "play": play.structuredContent,
+                }
+# mcp-client-snippet:end
+```
 
 ### Discord Application Emojis
 
