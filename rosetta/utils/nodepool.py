@@ -115,6 +115,12 @@ class HybridNodePool(NodePool):
                 password=node.password,
             )
 
+    async def destroy_guild_players(self, guild_id: int) -> None:
+        for node in self.nodes.values():
+            player = node.get_player(guild_id)
+            if player is not None:
+                await player.destroy()
+
     async def delete_nodes(self):
         nodes = list(self._nodes.values())
         for node in nodes:

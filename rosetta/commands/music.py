@@ -62,6 +62,9 @@ class Music(Cog):
         )
         if player is None:
             if interaction.user.voice and interaction.user.voice.channel:
+                await self.pool.destroy_guild_players(
+                    interaction.user.voice.channel.guild.id
+                )
                 player_cls = (
                     partial(CustomPlayer, node_identifier=node_name)
                     if node_name
@@ -70,7 +73,19 @@ class Music(Cog):
                 player: CustomPlayer = await interaction.user.voice.channel.connect(
                     cls=player_cls
                 )
-                await player.set_volume(10)
+
+        await player.set_volume(20)
+        normalization = lava_lyra.Filter(tag="play-normalization")
+        normalization.payload = {
+            "pluginFilters": {
+                "normalization": {
+                    "maxAmplitude": 0.05,
+                    "adaptive": True,
+                }
+            }
+        }
+        if not player.filters.has_filter(filter_tag=normalization.tag):
+            await player.add_filter(normalization)
 
         results = await player.get_tracks(
             query=f"{url}", search_type=lava_lyra.URLRegex.YOUTUBE_URL
