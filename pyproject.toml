@@ -12,6 +12,7 @@ dependencies = [
     "langfuse>=3.6.1",
     "lava-lyra>=1.6.1",
     "mcp>=1.28,<2",
+    "nanobot-ai==0.2.2",
     "pydantic-ai-slim[openai]>=0.0.46",
     "pydantic-settings>=2.12.0",
     "pynacl>=1.5.0",
