@@ -1,5 +1,7 @@
 import logging
+from typing import Protocol
 
+import anyio
 import discord
 from discord.ext import commands
 
@@ -12,6 +14,8 @@ from .utils.config import (
     EmojiConfig,
     MCPConfig,
     McpSetting,
+    NanobotConfig,
+    NanobotSetting,
 )
 from .utils.embeds import ErrorEmbed
 from .utils.log import LogContext, PydanticAdapter, setup_logging
@@ -25,34 +29,55 @@ intents.guilds = True
 intents.voice_states = True
 
 
+class ClosableNanobotCog(Protocol):
+    async def aclose(self) -> None: ...
+
+
 class RosettaBot(commands.Bot):
     def __init__(
         self,
         *,
         cog_config: CogSetting = CogConfig,
         mcp_config: McpSetting = MCPConfig,
+        nanobot_config: NanobotSetting = NanobotConfig,
     ) -> None:
         super().__init__(command_prefix="!", intents=intents)
         self._cog_config = cog_config
         self._mcp_config = mcp_config
+        self._nanobot_config = nanobot_config
         self._mcp_runtime: MCPRuntime | None = None
+        self._nanobot_cog: ClosableNanobotCog | None = None
 
     async def setup_hook(self) -> None:
+        if not self._cog_config.NANOBOT_DISABLE and self._cog_config.MUSIC_DISABLE:
+            raise RuntimeError(
+                "COG_NANOBOT_DISABLE=false requires COG_MUSIC_DISABLE=false"
+            )
+        if not self._cog_config.NANOBOT_DISABLE and not self._mcp_config.ENABLED:
+            raise RuntimeError("COG_NANOBOT_DISABLE=false requires MCP_ENABLED=true")
         if self._mcp_config.ENABLED and self._cog_config.MUSIC_DISABLE:
             raise RuntimeError("MCP_ENABLED requires COG_MUSIC_DISABLE=false")
+        self._nanobot_config.validate_startup(self._cog_config)
 
         if not self._cog_config.BASICS_DISABLE:
             from .commands.basics import Basics
 
             await self.add_cog(Basics(self))
+        mcp_started_by_this_setup = False
         if not self._cog_config.MUSIC_DISABLE:
             from .commands.music import Music
 
             music = Music(self)
             await self.add_cog(music)
             if self._mcp_config.ENABLED:
-                self._mcp_runtime = MCPRuntime(self._mcp_config, music.service)
-                await self._mcp_runtime.start()
+                if self._mcp_runtime is None:
+                    self._mcp_runtime = MCPRuntime(self._mcp_config, music.service)
+                    await self._mcp_runtime.start()
+                    mcp_started_by_this_setup = True
+        if not self._cog_config.NANOBOT_DISABLE:
+            await self._setup_nanobot(
+                mcp_started_by_this_setup=mcp_started_by_this_setup
+            )
         if not self._cog_config.MYGO_DISABLE:
             from .commands.mygo import Mygo
 
@@ -61,6 +86,52 @@ class RosettaBot(commands.Bot):
             from .commands.llm import LLM
 
             await self.add_cog(LLM(self))
+
+    async def _setup_nanobot(self, *, mcp_started_by_this_setup: bool) -> None:
+        from .commands.nanobot import Nanobot
+        from .utils.nanobot_client import NanobotSdkClient
+        from .utils.nanobot_policy import GuildPolicyRepository
+
+        client = None
+        cog = None
+        added = False
+        try:
+            client = NanobotSdkClient.create(self._nanobot_config)
+            policy_repository = GuildPolicyRepository(self._nanobot_config.POLICY_PATH)
+            cog = Nanobot(self, policy_repository=policy_repository, client=client)
+            await self.add_cog(cog)
+            added = True
+            self._nanobot_cog = cog
+        except BaseException as error:  # noqa: BLE001  # BROAD_EXCEPT_OK: composition boundary re-raises after cleanup.
+            await self._rollback_nanobot_startup(
+                error,
+                partial_client=client,
+                partial_cog=cog,
+                cog_added=added,
+                stop_owned_mcp=mcp_started_by_this_setup,
+            )
+            raise
+
+    async def _rollback_nanobot_startup(
+        self,
+        original: BaseException,
+        *,
+        partial_client,
+        partial_cog: ClosableNanobotCog | None,
+        cog_added: bool,
+        stop_owned_mcp: bool,
+    ) -> None:
+        self._nanobot_cog = None
+        if cog_added and partial_cog is not None:
+            self.remove_cog(getattr(partial_cog, "qualified_name", "Nanobot"))
+        if partial_cog is not None:
+            await self._cleanup_step(original, partial_cog.aclose)
+        elif partial_client is not None:
+            await self._cleanup_step(original, partial_client.aclose)
+        if stop_owned_mcp and self._mcp_runtime is not None:
+            runtime = self._mcp_runtime
+            self._mcp_runtime = None
+            await self._cleanup_step(original, runtime.stop)
 
     async def on_ready(self) -> None:
         logger.info(f"We have logged in as {self.user}")
@@ -82,11 +153,37 @@ class RosettaBot(commands.Bot):
             logger.error(f"Failed to sync commands: {e}")
 
     async def close(self) -> None:
+        failure: BaseException | None = None
+        nanobot_cog = self._nanobot_cog
+        self._nanobot_cog = None
+        if nanobot_cog is not None:
+            failure = await self._close_collecting(failure, nanobot_cog.aclose)
+
+        runtime = self._mcp_runtime
+        self._mcp_runtime = None
+        if runtime is not None:
+            failure = await self._close_collecting(failure, runtime.stop)
+
+        failure = await self._close_collecting(failure, super().close)
+        if failure is not None:
+            raise failure
+
+    async def _close_collecting(self, failure: BaseException | None, close_call):
         try:
-            if self._mcp_runtime is not None:
-                await self._mcp_runtime.stop()
-        finally:
-            await super().close()
+            with anyio.CancelScope(shield=True):
+                await close_call()
+        except BaseException as error:  # noqa: BLE001  # BROAD_EXCEPT_OK: cleanup must continue, then re-raise.
+            if failure is None:
+                return error
+            failure.add_note(f"suppressed cleanup error: {error}")
+        return failure
+
+    async def _cleanup_step(self, original: BaseException, close_call) -> None:
+        try:
+            with anyio.CancelScope(shield=True):
+                await close_call()
+        except BaseException as error:  # noqa: BLE001  # BROAD_EXCEPT_OK: rollback preserves original failure.
+            original.add_note(f"suppressed rollback cleanup error: {error}")
 
 
 bot = RosettaBot()
