@@ -1,3 +1,6 @@
+from dataclasses import dataclass
+from pathlib import Path
+
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -22,6 +25,44 @@ class CogSetting(BaseSettings):
     MUSIC_DISABLE: bool = False
     MYGO_DISABLE: bool = False
     LLM_DISABLE: bool = False
+    NANOBOT_DISABLE: bool = True
+
+
+@dataclass(frozen=True, slots=True)
+class NanobotConfigError(RuntimeError):
+    env_var: str
+    path: Path
+    reason: str
+
+    def __str__(self) -> str:
+        return f"{self.env_var} must point to a readable Nanobot config file ({self.path}): {self.reason}"
+
+
+class NanobotSetting(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_prefix="NANOBOT_",
+        extra="ignore",
+    )
+
+    CONFIG_PATH: Path = Path(".data/nanobot/config.json")
+    POLICY_PATH: Path = Path(".data/nanobot/guild-policies.json")
+    MAX_CONCURRENT_RUNS: int = Field(default=3, ge=1)
+
+    def validate_startup(self, cog_settings: CogSetting) -> None:
+        if cog_settings.NANOBOT_DISABLE:
+            return
+
+        try:
+            with self.CONFIG_PATH.open("rb"):
+                return
+        except OSError as error:
+            raise NanobotConfigError(
+                env_var="NANOBOT_CONFIG_PATH",
+                path=self.CONFIG_PATH,
+                reason=error.strerror or error.__class__.__name__,
+            ) from error
 
 
 # Emoji config - fetched from application emojis at startup
@@ -125,3 +166,4 @@ LangfuseConfig = LangfuseSetting()
 LavaLinkConfig = LavaLinkSetting()
 CogConfig = CogSetting()
 MCPConfig = McpSetting()
+NanobotConfig = NanobotSetting()

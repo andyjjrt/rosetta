@@ -1,0 +1,60 @@
+{
+  "agents": {
+    "defaults": {
+      "modelPreset": "rosetta",
+      "workspace": "${NANOBOT_WORKSPACE}",
+      "timezone": "Asia/Taipei",
+      "unifiedSession": false,
+      "dream": {
+        "enabled": false
+      }
+    }
+  },
+  "modelPresets": {
+    "rosetta": {
+      "provider": "rosetta",
+      "model": "${LLM_DEFAULT_MODEL}",
+      "temperature": 0.1,
+      "maxTokens": 8192,
+      "contextWindowTokens": 200000
+    }
+  },
+  "providers": {
+    "rosetta": {
+      "apiKey": "${LLM_API_KEY}",
+      "apiBase": "${LLM_BASE_URL}"
+    }
+  },
+  "channels": {
+    "sendProgress": true,
+    "sendToolHints": false,
+    "extractDocumentText": true,
+    "sendMaxRetries": 3,
+    "showReasoning": false
+  },
+  "transcription": {
+    "enabled": false
+  },
+  "tools": {
+    "restrictToWorkspace": true,
+    "file": {
+      "enable": true
+    },
+    "exec": {
+      "enable": false
+    },
+    "web": {
+      "enable": false
+    },
+    "ssrfWhitelist": ["127.0.0.1/32"],
+    "mcpServers": {
+      "rosetta": {
+        "url": "http://127.0.0.1:${MCP_PORT}${MCP_PATH}/",
+        "headers": {
+          "Authorization": "Bearer ${MCP_BEARER_TOKEN}"
+        },
+        "enabledTools": ["search", "play"]
+      }
+    }
+  }
+}
