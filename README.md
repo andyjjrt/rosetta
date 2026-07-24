@@ -79,6 +79,12 @@ Configuration is done via **environment variables**:
 | `MCP_PATH` | MCP mount path, starting with one `/` (default: `/mcp`) |
 | `MCP_BEARER_TOKEN` | Required bearer secret when MCP is enabled; at least 32 characters |
 | `MCP_ALLOWED_HOSTS` | JSON list of accepted HTTP Host values, e.g. `["127.0.0.1", "localhost"]` |
+| `COG_NANOBOT_DISABLE` | Set `false` to enable Nanobot mention/reply responses (default: `true`) |
+| `NANOBOT_CONFIG_PATH` | Nanobot config path inside the runtime container or process |
+| `NANOBOT_POLICY_PATH` | Versioned guild/channel policy file path |
+| `NANOBOT_MAX_CONCURRENT_RUNS` | Maximum concurrent Nanobot turns across sessions |
+| `NANOBOT_WORKSPACE` | Dedicated persistent Nanobot workspace, separate from source and secrets |
+| `NANOBOT_ROSETTA_MCP_URL` | Loopback MCP client URL for Nanobot; use `127.0.0.1`, never `0.0.0.0` |
 
 ### Private MCP search/play endpoint
 
@@ -152,6 +158,45 @@ async def run_mcp_search_play(
                 }
 # mcp-client-snippet:end
 ```
+
+### Nanobot Discord agent
+
+Nanobot is disabled by default. When enabled, Rosetta accepts three non-empty guild invocation forms: a direct mention such as `@Rosetta search for city pop`, a reply to another user's message that explicitly mentions Rosetta, or a direct reply to Rosetta without another mention. Replies to other users include the referenced author's ID and message content in the Nanobot prompt. DMs, bot/webhook messages, disabled guilds, disabled channels, and ordinary replies without a Rosetta mention are ignored. A server administrator must run `/nanobot settings`, enable the guild, and add the text channels where Nanobot is allowed. Threads inherit the parent channel's allow/deny policy but keep separate conversation history.
+
+Discord's **Message Content Intent** is required because mention prompts are read from message text. Enable the privileged intent in the Discord Developer Portal and in your deployment before turning on Nanobot. The settings UI is Administrator-only and never displays Nanobot config, provider keys, or MCP bearer secrets.
+
+Use the committed `nanobot.config.example.json` as a template, not as a secret-bearing runtime file:
+
+```bash
+cp nanobot.config.example.json nanobot.config.json
+```
+
+Keep `nanobot.config.json` untracked. For Compose, the opt-in overlay mounts that operator copy read-only at `/app/nanobot.config.json`, persists `/app/.data`, enables Rosetta MCP, and points Nanobot at loopback MCP inside the same container. The base `docker-compose.yml` remains unchanged for existing deployments.
+
+Required Nanobot deployment values:
+
+- `COG_NANOBOT_DISABLE=false`
+- `NANOBOT_CONFIG_PATH=/app/nanobot.config.json`
+- `NANOBOT_WORKSPACE=/app/.data/nanobot/workspace`
+- `NANOBOT_ROSETTA_MCP_URL=http://127.0.0.1:${MCP_PORT:-8000}${MCP_PATH:-/mcp}/`
+- `MCP_ENABLED=true`, `MCP_HOST=127.0.0.1`, `MCP_PORT`, `MCP_PATH`, `MCP_BEARER_TOKEN`, and `MCP_ALLOWED_HOSTS`
+- Existing provider values: `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_DEFAULT_MODEL`
+
+Start Rosetta with Nanobot using both Compose files:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.nanobot.yaml up -d
+```
+
+Music and MCP are startup dependencies for Nanobot. Music must remain enabled because Rosetta's MCP tools expose music `search`/`play`, and MCP must be enabled with a high-entropy bearer token before Nanobot can use those tools. Nanobot file tools are constrained to `NANOBOT_WORKSPACE`; keep that workspace under `.data/` so it is isolated from source, `.env`, the read-only Nanobot config, and guild policy internals.
+
+Troubleshooting:
+
+- Missing provider env: if Nanobot reports an unresolved `${LLM_*}` variable, set `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_DEFAULT_MODEL` in the Compose environment used by Rosetta.
+- HTTP 401 from MCP: `MCP_BEARER_TOKEN` must match the bearer header in `nanobot.config.json`; rotate both together and never paste the token into Discord.
+- SSRF/local URL blocked: the Nanobot config must whitelist `127.0.0.1/32` for loopback MCP only. Do not broaden this unless you understand Nanobot's SSRF guard.
+- `0.0.0.0` misuse: bind addresses may use `0.0.0.0`, but client URLs must not. `NANOBOT_ROSETTA_MCP_URL` and the Nanobot MCP server URL must use `http://127.0.0.1:...`, not `http://0.0.0.0:...`.
+- Disabled channels: if mentions or replies do nothing, run `/nanobot settings`, confirm the guild is enabled, and add the parent text channel for threads.
 
 ### Discord Application Emojis
 

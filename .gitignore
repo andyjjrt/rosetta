@@ -1,5 +1,7 @@
 __pycache__/
 .env
+.playwright-mcp/
+nanobot.config.json
 music/
 mygo-ave-video/
 .data/
