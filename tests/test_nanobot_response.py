@@ -12,6 +12,7 @@ from rosetta.utils.nanobot_response import (
     NanobotFinalText,
     NanobotPublicFailure,
     NanobotRenderingFailure,
+    NanobotRenderOutcome,
     NanobotTextDelta,
     NanobotToolActivity,
     render_nanobot_response,
@@ -217,9 +218,10 @@ async def test_coalesces_preview_and_suppresses_mentions_when_deltas_are_fast() 
     )
 
     # When: the renderer consumes the normalized stream.
-    await render_nanobot_response(responder, stream, clock=clock)
+    outcome = await render_nanobot_response(responder, stream, clock=clock)
 
     # Then: Discord-visible calls are mention-safe and fast deltas are coalesced.
+    assert outcome is NanobotRenderOutcome.SUCCEEDED
     assert [call.mention_author for call in responder.replies] == [False]
     assert all(
         mention_policy_is_none(call.allowed_mentions) for call in responder.replies
@@ -241,9 +243,10 @@ async def test_overflow_final_chunks_use_original_message_channel_send() -> None
     stream = EventStream([NanobotFinalText(final_text)])
 
     # When: the renderer sends a multi-message final response.
-    await render_nanobot_response(original_message, stream, clock=clock)
+    outcome = await render_nanobot_response(original_message, stream, clock=clock)
 
     # Then: overflow chunks use the channel surface with safe mention policy.
+    assert outcome is NanobotRenderOutcome.SUCCEEDED
     assert original_message.reply_message is not None
     edited = [call.content for call in original_message.reply_message.edits]
     sent = [call.content for call in channel.sends]
@@ -261,13 +264,30 @@ async def test_public_failure_is_safe_and_does_not_expose_provider_details() -> 
     )
 
     # When: the renderer handles the failure.
-    await render_nanobot_response(responder, stream, clock=clock)
+    outcome = await render_nanobot_response(responder, stream, clock=clock)
 
     # Then: only the safe failure text is shown.
+    assert outcome is NanobotRenderOutcome.FAILED
     assert [call.content for call in responder.messages[0].edits] == [
         "Nanobot is unavailable. Try again later."
     ]
     assert responder.sends == []
+
+
+async def test_clean_stream_exhaustion_returns_success_after_final_flush() -> None:
+    # Given: the provider stream ends without an explicit final event.
+    clock = DeterministicClock()
+    responder = FakeResponder(clock)
+    stream = EventStream([NanobotTextDelta("draft")])
+
+    # When: the renderer flushes accumulated text at stream exhaustion.
+    outcome = await render_nanobot_response(responder, stream, clock=clock)
+
+    # Then: the fallback final edit remains safe and reports success.
+    assert outcome is NanobotRenderOutcome.SUCCEEDED
+    assert [call.content for call in responder.messages[0].edits] == ["draft", "draft"]
+    assert responder.sends == []
+    assert stream.close_calls == 1
 
 
 async def test_cancellation_closes_stream_and_emits_no_stale_final() -> None:

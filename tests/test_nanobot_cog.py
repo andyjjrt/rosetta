@@ -1,18 +1,29 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import assert_never
+
 import anyio
 import discord
 import pytest
 
+import rosetta.commands.nanobot as nanobot_module
 from rosetta.commands.nanobot import Nanobot
 from rosetta.utils.nanobot_client import (
     NanobotClientBusy,
+    NanobotClientClosed,
     NanobotRunAccepted,
     NanobotRunStart,
 )
-from rosetta.utils.nanobot_response import NanobotFinalText, NanobotTextDelta
+from rosetta.utils.nanobot_response import (
+    NanobotFinalText,
+    NanobotPublicFailure,
+    NanobotRenderingFailure,
+    NanobotTextDelta,
+)
 from rosetta.utils.views.Nanobot import NanobotSettingsView
 from tests.nanobot_cog_fakes import (
+    BlockingCall,
     BlockingEventStream,
     CountingPolicyRepository,
     EventStream,
@@ -40,9 +51,45 @@ from tests.nanobot_cog_fakes import (
 pytestmark = pytest.mark.anyio
 
 
+@dataclass(slots=True)
+class HttpResponse:
+    status: int = 500
+    reason: str = "test failure"
+
+
 @pytest.fixture
 def anyio_backend() -> str:
     return "asyncio"
+
+
+def http_failure() -> discord.HTTPException:
+    return discord.HTTPException(HttpResponse(), "discord rejected reaction")
+
+
+def cancellation_failure() -> BaseException:
+    return anyio.get_cancelled_exc_class()("listener cancelled")
+
+
+async def cancel_listener_at(
+    cog: Nanobot,
+    message: FakeMessage,
+    block: BlockingCall,
+) -> list[BaseException]:
+    cancellations: list[BaseException] = []
+
+    async def run_listener() -> None:
+        try:
+            await cog.on_message(message)
+        except anyio.get_cancelled_exc_class() as error:
+            cancellations.append(error)
+            raise
+
+    async with anyio.create_task_group() as task_group:
+        task_group.start_soon(run_listener)
+        await block.entered.wait()
+        task_group.cancel_scope.cancel()
+
+    return cancellations
 
 
 async def test_settings_registration_and_admin_view_behavior_remain_intact() -> None:
@@ -165,6 +212,704 @@ async def test_listener_forwards_exact_request_and_reconstructs_final_response()
     assert "author_voice_channel_id: 55" in call.prompt
     assert "<discord-user-message>\nhello\n</discord-user-message>" in call.prompt
     assert bot.process_commands_calls == 0
+
+
+async def test_listener_keeps_typing_active_from_processing_to_success_reaction() -> (
+    None
+):
+    # Given: an enabled mention renders successfully.
+    message = mention_message()
+    client = FakeClient(
+        starts=[NanobotRunAccepted(events=EventStream([NanobotFinalText("done")]))]
+    )
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository(), client=client)
+
+    # When: the listener completes the full turn.
+    await cog.on_message(message)
+
+    # Then: the processing reaction is active during rendering and terminalizes to success.
+    records = message.operation_trace.records
+    assert [(record.name, record.emoji) for record in records] == [
+        ("typing.enter", None),
+        ("source.add_reaction", "⏳"),
+        ("source.reply", None),
+        ("reply.edit", None),
+        ("source.remove_reaction", "⏳"),
+        ("source.add_reaction", "✅"),
+        ("typing.exit", None),
+    ]
+    assert all(record.typing_active for record in records[1:-1])
+    assert records[4].bot_user_id == 123
+
+
+async def test_listener_terminalizes_public_failure_to_failure_reaction() -> None:
+    # Given: the renderer emits a public failure response.
+    message = mention_message()
+    client = FakeClient(
+        starts=[
+            NanobotRunAccepted(
+                events=EventStream([NanobotPublicFailure("public failure")])
+            )
+        ]
+    )
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository(), client=client)
+
+    # When: the listener handles the failed render outcome.
+    await cog.on_message(message)
+
+    # Then: exact response text is preserved and the source terminalizes as failed.
+    assert reconstructed_text(message) == "public failure"
+    assert [
+        (record.name, record.emoji) for record in message.operation_trace.records
+    ] == [
+        ("typing.enter", None),
+        ("source.add_reaction", "⏳"),
+        ("source.reply", None),
+        ("reply.edit", None),
+        ("source.remove_reaction", "⏳"),
+        ("source.add_reaction", "❌"),
+        ("typing.exit", None),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("start", "expected"),
+    (
+        (
+            NanobotClientBusy(session_key="discord:10:20:30"),
+            "Nanobot is already handling your previous request.",
+        ),
+        (NanobotClientClosed(), "Nanobot is shutting down. Try again later."),
+    ),
+)
+async def test_listener_terminalizes_start_failures_to_failure_reaction(
+    start: NanobotRunStart,
+    expected: str,
+) -> None:
+    # Given: the client returns a nominal start failure.
+    message = mention_message()
+    client = FakeClient(starts=[start])
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository(), client=client)
+
+    # When: the listener handles the message.
+    await cog.on_message(message)
+
+    # Then: the existing user text is preserved and failure reactions happen while typing.
+    assert message.replies == [expected]
+    assert [
+        (record.name, record.emoji) for record in message.operation_trace.records
+    ] == [
+        ("typing.enter", None),
+        ("source.add_reaction", "⏳"),
+        ("source.reply", None),
+        ("source.remove_reaction", "⏳"),
+        ("source.add_reaction", "❌"),
+        ("typing.exit", None),
+    ]
+
+
+async def test_listener_terminalizes_missing_client_to_failure_reaction() -> None:
+    # Given: composition has not provided a Nanobot client.
+    message = mention_message()
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository())
+
+    # When: a valid mention arrives.
+    await cog.on_message(message)
+
+    # Then: the existing config text is preserved and the turn terminalizes as failed.
+    assert message.replies == ["Nanobot is not configured for this server."]
+    assert [
+        (record.name, record.emoji) for record in message.operation_trace.records
+    ] == [
+        ("typing.enter", None),
+        ("source.add_reaction", "⏳"),
+        ("source.reply", None),
+        ("source.remove_reaction", "⏳"),
+        ("source.add_reaction", "❌"),
+        ("typing.exit", None),
+    ]
+
+
+async def test_listener_swallowed_rendering_failure_gets_failure_reaction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Given: the renderer raises the existing swallowed Discord rendering failure.
+    message = mention_message()
+    client = FakeClient(
+        starts=[NanobotRunAccepted(events=EventStream([NanobotFinalText("ignored")]))]
+    )
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository(), client=client)
+
+    async def fail_render(
+        responder: FakeMessage,
+        stream: EventStream,
+    ) -> None:
+        await stream.aclose()
+        raise NanobotRenderingFailure(operation="edit the response")
+
+    monkeypatch.setattr(nanobot_module, "render_nanobot_response", fail_render)
+
+    # When: the listener handles the failed render.
+    await cog.on_message(message)
+
+    # Then: the exception remains swallowed and the source terminalizes as failed.
+    assert message.replies == []
+    assert [
+        (record.name, record.emoji) for record in message.operation_trace.records
+    ] == [
+        ("typing.enter", None),
+        ("source.add_reaction", "⏳"),
+        ("source.remove_reaction", "⏳"),
+        ("source.add_reaction", "❌"),
+        ("typing.exit", None),
+    ]
+
+
+async def test_listener_cancellation_terminalizes_and_reraises() -> None:
+    # Given: a blocking accepted stream is cancelled while the turn is rendering.
+    stream = BlockingEventStream()
+    client = FakeClient(starts=[NanobotRunAccepted(events=stream)])
+    message = mention_message()
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository(), client=client)
+    cancellations: list[BaseException] = []
+
+    # When: caller cancellation interrupts the real listener surface.
+    async def run_listener() -> None:
+        try:
+            await cog.on_message(message)
+        except anyio.get_cancelled_exc_class() as error:
+            cancellations.append(error)
+            raise
+
+    async with anyio.create_task_group() as task_group:
+        task_group.start_soon(run_listener)
+        await stream.entered.wait()
+        task_group.cancel_scope.cancel()
+
+    # Then: stream cleanup happened once, cancellation propagated, and ❌ was attempted.
+    assert len(cancellations) == 1
+    assert stream.closed is True
+    assert stream.close_count == 1
+    assert [
+        (record.name, record.emoji) for record in message.operation_trace.records
+    ] == [
+        ("typing.enter", None),
+        ("source.add_reaction", "⏳"),
+        ("source.reply", None),
+        ("source.remove_reaction", "⏳"),
+        ("source.add_reaction", "❌"),
+        ("typing.exit", None),
+    ]
+
+
+async def test_listener_stream_exception_terminalizes_and_reraises_original() -> None:
+    # Given: rendering starts, then the accepted stream raises an unexpected error.
+    original = RuntimeError("stream exploded")
+    stream = EventStream(events=[], unexpected_error=original)
+    client = FakeClient(starts=[NanobotRunAccepted(events=stream)])
+    message = mention_message()
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository(), client=client)
+
+    # When: the listener observes the unexpected stream failure.
+    with pytest.raises(RuntimeError) as raised:
+        await cog.on_message(message)
+
+    # Then: the original exception is preserved and the source terminalizes failed.
+    assert raised.value is original
+    assert stream.closed is True
+    assert stream.close_count == 1
+    assert message.replies == ["…"]
+    assert [
+        (record.name, record.emoji) for record in message.operation_trace.records
+    ] == [
+        ("typing.enter", None),
+        ("source.add_reaction", "⏳"),
+        ("source.reply", None),
+        ("source.remove_reaction", "⏳"),
+        ("source.add_reaction", "❌"),
+        ("typing.exit", None),
+    ]
+
+
+async def test_listener_client_exception_terminalizes_and_reraises_original() -> None:
+    # Given: the client raises before returning a run-start variant.
+    original = RuntimeError("client exploded")
+    client = FakeClient(starts=[], run_failures=[original])
+    message = mention_message()
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository(), client=client)
+
+    # When: the listener observes the unexpected client failure.
+    with pytest.raises(RuntimeError) as raised:
+        await cog.on_message(message)
+
+    # Then: the original exception is preserved and the source terminalizes failed.
+    assert raised.value is original
+    assert message.replies == []
+    assert [
+        (record.name, record.emoji) for record in message.operation_trace.records
+    ] == [
+        ("typing.enter", None),
+        ("source.add_reaction", "⏳"),
+        ("source.remove_reaction", "⏳"),
+        ("source.add_reaction", "❌"),
+        ("typing.exit", None),
+    ]
+
+
+async def test_listener_processing_add_cancellation_terminalizes_and_reraises() -> None:
+    # Given: cancellation strikes while the listener adds the processing reaction.
+    original = cancellation_failure()
+    message = mention_message()
+    message.add_reaction_failures_by_emoji["⏳"] = [original]
+    client = FakeClient(
+        starts=[NanobotRunAccepted(events=EventStream([NanobotFinalText("ignored")]))]
+    )
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository(), client=client)
+
+    # When: the first post-policy await receives cancellation.
+    with pytest.raises(anyio.get_cancelled_exc_class()) as raised:
+        await cog.on_message(message)
+
+    # Then: failed terminalization is shield-attempted and cancellation is preserved.
+    assert raised.value is original
+    assert message.channel.typing_active_depth == 0
+    assert [
+        (record.name, record.emoji) for record in message.operation_trace.records
+    ] == [
+        ("typing.enter", None),
+        ("source.add_reaction", "⏳"),
+        ("source.remove_reaction", "⏳"),
+        ("source.add_reaction", "❌"),
+        ("typing.exit", None),
+    ]
+
+
+async def test_listener_typing_entry_cancellation_terminalizes_and_reraises() -> None:
+    # Given: cancellation strikes while entering the typing context.
+    block = BlockingCall()
+    message = mention_message(channel=FakeChannel(id=20, typing_enter_block=block))
+    client = FakeClient(
+        starts=[NanobotRunAccepted(events=EventStream([NanobotFinalText("ignored")]))]
+    )
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository(), client=client)
+
+    # When: the typing context entry is cancelled by the caller task group.
+    cancellations = await cancel_listener_at(cog, message, block)
+
+    # Then: outer cleanup attempts failed terminalization and typing depth stays zero.
+    assert len(cancellations) == 1
+    assert message.channel.typing_active_depth == 0
+    assert message.replies == []
+    assert [
+        (record.name, record.emoji) for record in message.operation_trace.records
+    ] == [
+        ("typing.enter.block", None),
+        ("source.remove_reaction", "⏳"),
+        ("source.add_reaction", "❌"),
+    ]
+
+
+async def test_listener_config_reply_cancellation_terminalizes_and_reraises() -> None:
+    # Given: cancellation strikes while replying that Nanobot is not configured.
+    original = cancellation_failure()
+    message = mention_message()
+    message.reply_failures.append(original)
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository())
+
+    # When: the missing-client config reply receives cancellation.
+    with pytest.raises(anyio.get_cancelled_exc_class()) as raised:
+        await cog.on_message(message)
+
+    # Then: failed terminalization is shield-attempted and cancellation is preserved.
+    assert raised.value is original
+    assert message.channel.typing_active_depth == 0
+    assert message.replies == []
+    assert [
+        (record.name, record.emoji) for record in message.operation_trace.records
+    ] == [
+        ("typing.enter", None),
+        ("source.add_reaction", "⏳"),
+        ("source.reply", None),
+        ("source.remove_reaction", "⏳"),
+        ("source.add_reaction", "❌"),
+        ("typing.exit", None),
+    ]
+
+
+async def test_listener_terminal_add_cancellation_does_not_reenter_terminalization() -> (
+    None
+):
+    # Given: cancellation strikes while adding the successful terminal reaction.
+    original = cancellation_failure()
+    message = mention_message()
+    message.add_reaction_failures_by_emoji["✅"] = [original]
+    stream = EventStream([NanobotFinalText("done")])
+    client = FakeClient(starts=[NanobotRunAccepted(events=stream)])
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository(), client=client)
+
+    # When: terminal reaction add receives cancellation.
+    with pytest.raises(anyio.get_cancelled_exc_class()) as raised:
+        await cog.on_message(message)
+
+    # Then: terminalization is not re-entered after the terminal phase starts.
+    assert raised.value is original
+    assert message.channel.typing_active_depth == 0
+    assert stream.close_count == 1
+    assert message.replies == ["…"]
+    assert reconstructed_text(message) == "done"
+    assert [
+        (record.name, record.emoji) for record in message.operation_trace.records
+    ] == [
+        ("typing.enter", None),
+        ("source.add_reaction", "⏳"),
+        ("source.reply", None),
+        ("reply.edit", None),
+        ("source.remove_reaction", "⏳"),
+        ("source.add_reaction", "✅"),
+        ("typing.exit", None),
+    ]
+
+
+async def test_listener_success_remove_cancellation_retries_failed_terminalization() -> (
+    None
+):
+    # Given: cancellation strikes while removing ⏳ before a success terminal add starts.
+    block = BlockingCall()
+    message = mention_message()
+    message.remove_reaction_blocks.append(block)
+    stream = EventStream([NanobotFinalText("done")])
+    client = FakeClient(starts=[NanobotRunAccepted(events=stream)])
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository(), client=client)
+
+    # When: the first processing removal is cancelled by the caller task group.
+    cancellations = await cancel_listener_at(cog, message, block)
+
+    # Then: cleanup performs a second remove and one ❌, with no ✅ attempt.
+    assert len(cancellations) == 1
+    assert message.channel.typing_active_depth == 0
+    assert stream.close_count == 1
+    assert message.replies == ["…"]
+    assert reconstructed_text(message) == "done"
+    assert [
+        (record.name, record.emoji) for record in message.operation_trace.records
+    ] == [
+        ("typing.enter", None),
+        ("source.add_reaction", "⏳"),
+        ("source.reply", None),
+        ("reply.edit", None),
+        ("source.remove_reaction", "⏳"),
+        ("source.remove_reaction", "⏳"),
+        ("source.add_reaction", "❌"),
+        ("typing.exit", None),
+    ]
+
+
+async def test_listener_success_add_cancellation_does_not_reenter_terminalization() -> (
+    None
+):
+    # Given: cancellation strikes while adding ✅ after terminal add has started.
+    block = BlockingCall()
+    message = mention_message()
+    message.add_reaction_blocks_by_emoji["✅"] = [block]
+    stream = EventStream([NanobotFinalText("done")])
+    client = FakeClient(starts=[NanobotRunAccepted(events=stream)])
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository(), client=client)
+
+    # When: the success terminal add is cancelled by the caller task group.
+    cancellations = await cancel_listener_at(cog, message, block)
+
+    # Then: there is one remove and one ✅ attempt, with no cleanup ❌.
+    assert len(cancellations) == 1
+    assert message.channel.typing_active_depth == 0
+    assert stream.close_count == 1
+    assert message.replies == ["…"]
+    assert reconstructed_text(message) == "done"
+    assert [
+        (record.name, record.emoji) for record in message.operation_trace.records
+    ] == [
+        ("typing.enter", None),
+        ("source.add_reaction", "⏳"),
+        ("source.reply", None),
+        ("reply.edit", None),
+        ("source.remove_reaction", "⏳"),
+        ("source.add_reaction", "✅"),
+        ("typing.exit", None),
+    ]
+
+
+async def test_listener_failure_add_cancellation_does_not_reenter_terminalization() -> (
+    None
+):
+    # Given: cancellation strikes while adding ❌ after terminal add has started.
+    block = BlockingCall()
+    message = mention_message()
+    message.add_reaction_blocks_by_emoji["❌"] = [block]
+    stream = EventStream([NanobotPublicFailure("public failure")])
+    client = FakeClient(starts=[NanobotRunAccepted(events=stream)])
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository(), client=client)
+
+    # When: the failure terminal add is cancelled by the caller task group.
+    cancellations = await cancel_listener_at(cog, message, block)
+
+    # Then: there is one remove and one ❌ attempt only.
+    assert len(cancellations) == 1
+    assert message.channel.typing_active_depth == 0
+    assert stream.close_count == 1
+    assert reconstructed_text(message) == "public failure"
+    assert [
+        (record.name, record.emoji) for record in message.operation_trace.records
+    ] == [
+        ("typing.enter", None),
+        ("source.add_reaction", "⏳"),
+        ("source.reply", None),
+        ("reply.edit", None),
+        ("source.remove_reaction", "⏳"),
+        ("source.add_reaction", "❌"),
+        ("typing.exit", None),
+    ]
+
+
+async def test_listener_terminal_add_exception_does_not_reenter_terminalization() -> (
+    None
+):
+    # Given: an unexpected exception strikes while adding the terminal success reaction.
+    original = RuntimeError("terminal add exploded")
+    message = mention_message()
+    message.add_reaction_failures_by_emoji["✅"] = [original]
+    stream = EventStream([NanobotFinalText("done")])
+    client = FakeClient(starts=[NanobotRunAccepted(events=stream)])
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository(), client=client)
+
+    # When: terminal reaction add raises after the terminal phase has started.
+    with pytest.raises(RuntimeError) as raised:
+        await cog.on_message(message)
+
+    # Then: the primary error is preserved and no second terminal emoji is attempted.
+    assert raised.value is original
+    assert message.channel.typing_active_depth == 0
+    assert stream.close_count == 1
+    assert message.replies == ["…"]
+    assert reconstructed_text(message) == "done"
+    assert [
+        (record.name, record.emoji) for record in message.operation_trace.records
+    ] == [
+        ("typing.enter", None),
+        ("source.add_reaction", "⏳"),
+        ("source.reply", None),
+        ("reply.edit", None),
+        ("source.remove_reaction", "⏳"),
+        ("source.add_reaction", "✅"),
+        ("typing.exit", None),
+    ]
+
+
+async def test_listener_cleanup_exception_preserves_primary_exception() -> None:
+    # Given: the stream raises first, then failed terminalization cleanup raises too.
+    primary = RuntimeError("stream exploded")
+    cleanup = RuntimeError("cleanup exploded")
+    message = mention_message()
+    message.remove_reaction_failures.append(cleanup)
+    stream = EventStream(events=[], unexpected_error=primary)
+    client = FakeClient(starts=[NanobotRunAccepted(events=stream)])
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository(), client=client)
+
+    # When: cleanup fails while preserving an unexpected stream exception.
+    with pytest.raises(RuntimeError) as raised:
+        await cog.on_message(message)
+
+    # Then: the primary exception remains raised and the cleanup error is preserved as a note.
+    assert raised.value is primary
+    assert "suppressed Nanobot terminalization cleanup error: cleanup exploded" in (
+        primary.__notes__
+    )
+    assert message.channel.typing_active_depth == 0
+    assert [
+        (record.name, record.emoji) for record in message.operation_trace.records
+    ] == [
+        ("typing.enter", None),
+        ("source.add_reaction", "⏳"),
+        ("source.reply", None),
+        ("source.remove_reaction", "⏳"),
+        ("typing.exit", None),
+    ]
+
+
+async def test_listener_cleanup_exception_preserves_primary_cancellation() -> None:
+    # Given: the config reply is cancelled, then failed terminalization cleanup raises too.
+    primary = cancellation_failure()
+    cleanup = RuntimeError("cleanup exploded")
+    message = mention_message()
+    message.reply_failures.append(primary)
+    message.remove_reaction_failures.append(cleanup)
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository())
+
+    # When: cleanup fails while preserving cancellation.
+    with pytest.raises(anyio.get_cancelled_exc_class()) as raised:
+        await cog.on_message(message)
+
+    # Then: the cancellation object remains raised and the cleanup error is preserved.
+    assert raised.value is primary
+    assert "suppressed Nanobot terminalization cleanup error: cleanup exploded" in (
+        primary.__notes__
+    )
+    assert message.channel.typing_active_depth == 0
+    assert [
+        (record.name, record.emoji) for record in message.operation_trace.records
+    ] == [
+        ("typing.enter", None),
+        ("source.add_reaction", "⏳"),
+        ("source.reply", None),
+        ("source.remove_reaction", "⏳"),
+        ("typing.exit", None),
+    ]
+
+
+async def test_listener_source_and_client_share_lifecycle_trace() -> None:
+    # Given: source message and fake client write to the same operation trace.
+    message = mention_message()
+    client = FakeClient(
+        starts=[NanobotRunAccepted(events=EventStream([NanobotFinalText("done")]))],
+        operation_trace=message.operation_trace,
+    )
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository(), client=client)
+
+    # When: the listener completes a successful turn.
+    await cog.on_message(message)
+
+    # Then: client.run occurs between processing add and render while typing is active.
+    records = message.operation_trace.records
+    assert [(record.name, record.emoji) for record in records] == [
+        ("typing.enter", None),
+        ("source.add_reaction", "⏳"),
+        ("client.run", None),
+        ("source.reply", None),
+        ("reply.edit", None),
+        ("source.remove_reaction", "⏳"),
+        ("source.add_reaction", "✅"),
+        ("typing.exit", None),
+    ]
+    assert all(record.typing_active for record in records[1:-1])
+
+
+async def test_listener_terminalizes_rendering_failure_when_processing_add_fails(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Given: the renderer raises the existing swallowed failure and ⏳ add fails.
+    message = mention_message()
+    message.add_reaction_failures.append(http_failure())
+    client = FakeClient(
+        starts=[NanobotRunAccepted(events=EventStream([NanobotFinalText("ignored")]))]
+    )
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository(), client=client)
+
+    async def fail_render(
+        responder: FakeMessage,
+        stream: EventStream,
+    ) -> None:
+        await stream.aclose()
+        raise NanobotRenderingFailure(operation="edit the response")
+
+    monkeypatch.setattr(nanobot_module, "render_nanobot_response", fail_render)
+
+    # When: processing reaction add is rejected by Discord.
+    with caplog.at_level("WARNING", logger=nanobot_module.logger.name):
+        await cog.on_message(message)
+
+    # Then: rendering failure is still swallowed and the HTTP rejection is logged only.
+    assert message.replies == []
+    assert [
+        (record.name, record.emoji) for record in message.operation_trace.records
+    ] == [
+        ("typing.enter", None),
+        ("source.add_reaction", "⏳"),
+        ("source.remove_reaction", "⏳"),
+        ("source.add_reaction", "❌"),
+        ("typing.exit", None),
+    ]
+    assert [record.message for record in caplog.records] == [
+        "Discord rejected Nanobot reaction add"
+    ]
+
+
+@pytest.mark.parametrize(
+    ("failure_phase", "expected_log"),
+    (
+        ("processing-add", "Discord rejected Nanobot reaction add"),
+        ("processing-remove", "Discord rejected Nanobot reaction removal"),
+        ("terminal-add", "Discord rejected Nanobot reaction add"),
+    ),
+)
+async def test_listener_reaction_http_failures_preserve_successful_render(
+    failure_phase: str,
+    expected_log: str,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Given: a successful render and one injected Discord reaction HTTP failure.
+    message = mention_message()
+    match failure_phase:
+        case "processing-add":
+            message.add_reaction_failures.append(http_failure())
+        case "processing-remove":
+            message.remove_reaction_failures.append(http_failure())
+        case "terminal-add":
+            message.add_reaction_failures_by_emoji["✅"] = [http_failure()]
+        case unreachable:
+            assert_never(unreachable)
+    client = FakeClient(
+        starts=[NanobotRunAccepted(events=EventStream([NanobotFinalText("done")]))]
+    )
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository(), client=client)
+
+    # When: Discord rejects exactly that reaction operation.
+    with caplog.at_level("WARNING", logger=nanobot_module.logger.name):
+        await cog.on_message(message)
+
+    # Then: the reply/render outcome is unchanged and only the reaction failure is logged.
+    assert message.replies == ["…"]
+    assert reconstructed_text(message) == "done"
+    assert [record.message for record in caplog.records] == [expected_log]
+
+
+async def test_listener_reaction_http_failure_preserves_stream_exception(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    # Given: an unexpected stream error and a rejected terminal ❌ add.
+    original = RuntimeError("stream exploded")
+    message = mention_message()
+    message.add_reaction_failures_by_emoji["❌"] = [http_failure()]
+    stream = EventStream(events=[], unexpected_error=original)
+    client = FakeClient(starts=[NanobotRunAccepted(events=stream)])
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository(), client=client)
+
+    # When: both the stream and terminal reaction fail.
+    with caplog.at_level("WARNING", logger=nanobot_module.logger.name):
+        with pytest.raises(RuntimeError) as raised:
+            await cog.on_message(message)
+
+    # Then: the stream exception remains the raised error and the HTTP failures are logged.
+    assert raised.value is original
+    assert stream.closed is True
+    assert stream.close_count == 1
+    assert message.replies == ["…"]
+    assert [record.message for record in caplog.records] == [
+        "Discord rejected Nanobot reaction add"
+    ]
+
+
+async def test_listener_ignored_message_does_not_touch_typing_or_reactions() -> None:
+    # Given: a valid-looking mention is disallowed by policy.
+    message = mention_message(channel=FakeChannel(id=21))
+    client = FakeClient(starts=[])
+    cog = Nanobot(bot=FakeBot(), policy_repository=enabled_repository(), client=client)
+
+    # When: the listener rejects it before processing.
+    await cog.on_message(message)
+
+    # Then: the source message remains untouched.
+    assert message.operation_trace.records == []
+    assert message.replies == []
+    assert client.calls == []
 
 
 async def test_thread_parent_policy_allows_thread_session_identity() -> None:

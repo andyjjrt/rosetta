@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import sys
 from dataclasses import dataclass
+from enum import Enum, auto
 from typing import Final, Protocol, Self, assert_never
 
 import anyio
@@ -14,6 +15,11 @@ LIVE_PREVIEW_LIMIT: Final = 1990
 INITIAL_REPLY_CONTENT: Final = "…"
 
 logger = logging.getLogger(__name__)
+
+
+class NanobotRenderOutcome(Enum):
+    SUCCEEDED = auto()
+    FAILED = auto()
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,7 +108,7 @@ async def render_nanobot_response(
     responder: NanobotDiscordResponder,
     stream: NanobotEventStream,
     clock: NanobotRenderClock | None = None,
-) -> None:
+) -> NanobotRenderOutcome:
     render_clock = clock or AnyioRenderClock()
     try:
         message = await _reply(responder, INITIAL_REPLY_CONTENT)
@@ -118,15 +124,16 @@ async def render_nanobot_response(
                 case NanobotPublicFailure(message=public_message):
                     await _wait_for_edit_slot(state, render_clock)
                     await _edit(message, _preview(public_message))
-                    return
+                    return NanobotRenderOutcome.FAILED
                 case NanobotFinalText(text=final_text):
                     await _flush_final(
                         responder, message, final_text, state, render_clock
                     )
-                    return
+                    return NanobotRenderOutcome.SUCCEEDED
                 case unreachable:
                     assert_never(unreachable)
         await _flush_final(responder, message, state.text, state, render_clock)
+        return NanobotRenderOutcome.SUCCEEDED
     finally:
         await _close_stream(stream)
 
