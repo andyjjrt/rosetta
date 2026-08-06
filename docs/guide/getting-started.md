@@ -32,6 +32,8 @@ Before deploying, you'll need:
 3. _(Optional)_ An **OpenAI-compatible API** endpoint for LLM features
 4. _(Optional)_ A **Langfuse** instance for LLM observability
 
+To enable the Discord agent, follow [Nanobot Setup](nanobot.md). It additionally requires Message Content Intent, an agent configuration file, the private MCP endpoint, and an administrator-managed guild/channel policy.
+
 ## Discord Application Emojis
 
 Upload the following emojis to your Discord application for the bot UI to work correctly:

@@ -48,6 +48,29 @@ These are only needed when `LAVALINK_DISCOVERY_MODE=k8s`:
 | `LANGFUSE_SECRET_KEY` | Langfuse secret key | For tracing |
 | `LANGFUSE_HOST` | Langfuse host URL | For tracing |
 
+## Nanobot Settings
+
+Nanobot is disabled by default and requires both an agent configuration file and a per-server guild policy. See [Nanobot Setup](nanobot.md) for the complete setup and Discord administration workflow.
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `COG_NANOBOT_DISABLE` | Disable the Nanobot cog | `true` |
+| `NANOBOT_CONFIG_PATH` | Readable Nanobot agent configuration file | `.data/nanobot/config.json` |
+| `NANOBOT_POLICY_PATH` | Persisted guild/channel allow policy | `.data/nanobot/guild-policies.json` |
+| `NANOBOT_MAX_CONCURRENT_RUNS` | Maximum concurrent Nanobot turns | `3` |
+| `NANOBOT_WORKSPACE` | Agent file-tool workspace used by `nanobot.config.json` | `.data/nanobot/workspace` |
+
+Nanobot's Rosetta tools require the private MCP endpoint:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MCP_ENABLED` | Enable the private MCP endpoint | `false` |
+| `MCP_HOST` | MCP bind address | `127.0.0.1` |
+| `MCP_PORT` | MCP listener port | `8000` |
+| `MCP_PATH` | Streamable HTTP mount path | `/mcp` |
+| `MCP_BEARER_TOKEN` | Shared bearer secret; at least 32 characters when enabled | None |
+| `MCP_ALLOWED_HOSTS` | Accepted HTTP Host values as a quoted JSON list | `["127.0.0.1","localhost"]` |
+
 ## Example `.env` File
 
 Copy `.env.example` to `.env`, then replace the placeholder values:

@@ -51,6 +51,7 @@ nav:
   - Guide:
       - Getting Started: guide/getting-started.md
       - Configuration: guide/configuration.md
+      - Nanobot Setup: guide/nanobot.md
   - Commands:
       - Music: commands/music.md
       - LLM: commands/llm.md
