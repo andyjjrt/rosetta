@@ -12,11 +12,12 @@ Chat with a language model. Supports text prompts and image attachments for visi
 |-----------|-------------|----------|
 | `prompt` | Your text prompt | Yes (or `image`) |
 | `image` | Image attachment for vision models | No |
-| `model` | Model to use (owner only, autocomplete) | No |
+| `model` | Model to use (owner or allowlisted users, autocomplete) | No |
 
 - Responses are **streamed** in real-time and displayed with a live-updating embed.
-- Non-owner users always use the configured `LLM_DEFAULT_MODEL`.
-- The bot owner can select from all available models via autocomplete.
+- Users without model selection access always use the configured `LLM_DEFAULT_MODEL`.
+- The bot owner and users granted access with `/setting llm add <user_id>` can select from all available models via autocomplete.
+- The bot owner can inspect or revoke grants with `/setting llm list` and `/setting llm remove <user_id>`.
 - All interactions are traced in **Langfuse** (if configured) with user ID, channel, and guild metadata.
 - A **cancel** button is available during streaming.
 
@@ -25,7 +26,7 @@ Chat with a language model. Supports text prompts and image attachments for visi
 List all available models from the configured LLM provider.
 
 !!! info
-    This command is available to all users, but model selection in `/llm chat` is restricted to the bot owner.
+    This command is available to all users, but model selection in `/llm chat` is restricted to the bot owner and users in the persisted model access list.
 
 ## `/llm image`
 

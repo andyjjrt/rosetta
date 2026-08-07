@@ -4,13 +4,11 @@ import pytest
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
 
-from rosetta.mcp.runtime import MCPRuntime
 from tests.mcp_http_support import (
     REDACTED_SECRET,
-    SECRET,
     DeterministicHttpMusicService,
     call_tool,
-    mcp_settings,
+    create_mcp_runtime_with_key,
     read_readme_snippet,
     reserve_port,
     write_evidence,
@@ -27,7 +25,10 @@ def anyio_backend() -> str:
 async def test_real_streamable_http_search_uri_play_contract() -> None:
     # Given: the real runtime/auth/server stack listens on a local TCP socket.
     service = DeterministicHttpMusicService()
-    runtime = MCPRuntime(mcp_settings(reserve_port()), service)
+    runtime, _key_repository, bearer_token = await create_mcp_runtime_with_key(
+        service,
+        reserve_port(),
+    )
     await runtime.start()
     url = runtime.url + "/"
     try:
@@ -35,7 +36,7 @@ async def test_real_streamable_http_search_uri_play_contract() -> None:
         import httpx2
 
         async with httpx2.AsyncClient(
-            headers={"Authorization": f"Bearer {SECRET}"},
+            headers={"Authorization": f"Bearer {bearer_token}"},
             timeout=httpx2.Timeout(30.0, read=300.0),
             follow_redirects=True,
         ) as http_client:
@@ -93,7 +94,10 @@ async def test_real_streamable_http_search_uri_play_contract() -> None:
 async def test_http_failure_contracts_and_readme_snippet_are_executable() -> None:
     # Given: a local runtime and the README's documented client snippet.
     service = DeterministicHttpMusicService()
-    runtime = MCPRuntime(mcp_settings(reserve_port()), service)
+    runtime, _key_repository, bearer_token = await create_mcp_runtime_with_key(
+        service,
+        reserve_port(),
+    )
     await runtime.start()
     url = runtime.url + "/"
     try:
@@ -106,9 +110,10 @@ async def test_http_failure_contracts_and_readme_snippet_are_executable() -> Non
         # When: auth, malformed IDs, stale/backend and conflict paths are exercised.
         async with httpx2.AsyncClient(timeout=5, follow_redirects=True) as client:
             unauthorized = await client.post(url, headers={"Host": "127.0.0.1"})
-        documented = await documented_flow(url, SECRET, "contract", "111", "222")
+        documented = await documented_flow(url, bearer_token, "contract", "111", "222")
         mismatch = await call_tool(
             url,
+            bearer_token,
             "play",
             {
                 "user_id": "111",
@@ -118,6 +123,7 @@ async def test_http_failure_contracts_and_readme_snippet_are_executable() -> Non
         )
         conflict = await call_tool(
             url,
+            bearer_token,
             "play",
             {
                 "user_id": "111",
@@ -127,11 +133,12 @@ async def test_http_failure_contracts_and_readme_snippet_are_executable() -> Non
         )
         malformed = await call_tool(
             url,
+            bearer_token,
             "play",
             {"user_id": "not-decimal", "voice_channel_id": "222", "url": "x"},
         )
         service.backend_available = False
-        backend = await call_tool(url, "search", {"keyword": "contract"})
+        backend = await call_tool(url, bearer_token, "search", {"keyword": "contract"})
 
         # Then: every documented failure is either HTTP 401 or a structured MCP result.
         assert unauthorized.status_code == 401

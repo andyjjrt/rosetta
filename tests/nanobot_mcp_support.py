@@ -5,7 +5,6 @@ import os
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Final
 
 import anyio
 import httpx2
@@ -14,15 +13,12 @@ from nanobot import Nanobot
 from rosetta.commands.nanobot import Nanobot as NanobotCog
 from rosetta.mcp.runtime import MCPRuntime
 from tests.mcp_http_support import (
-    SECRET,
     DeterministicHttpMusicService,
-    mcp_settings,
+    create_mcp_runtime_with_key,
     reserve_port,
 )
 from tests.nanobot_cog_fakes import FakeBot, enabled_repository, mention_message
 from tests.nanobot_openai_fake import fake_openai_server
-
-BAD_SECRET: Final = "wrong-test-token-that-is-long-enough"
 
 
 @dataclass(frozen=True, slots=True)
@@ -86,13 +82,20 @@ def _write_nanobot_config(
 
 async def run_nanobot_mcp_scenario(*, bearer_matches: bool) -> NanobotMcpScenarioResult:
     service = DeterministicHttpMusicService()
-    runtime = MCPRuntime(mcp_settings(reserve_port()), service)
+    runtime, _key_repository, bearer_token = await create_mcp_runtime_with_key(
+        service,
+        reserve_port(),
+    )
     await runtime.start()
     bot: Nanobot | None = None
     previous_base_url = os.environ.get("LLM_BASE_URL")
     try:
         if not bearer_matches:
-            return await _run_bad_bearer_boundary(runtime, service)
+            return await _run_bad_bearer_boundary(
+                runtime,
+                service,
+                f"{bearer_token}-wrong",
+            )
         async with fake_openai_server() as base_url:
             os.environ["LLM_BASE_URL"] = base_url
             with tempfile.TemporaryDirectory(prefix="rosetta-nanobot-") as temp_dir:
@@ -104,7 +107,7 @@ async def run_nanobot_mcp_scenario(*, bearer_matches: bool) -> NanobotMcpScenari
                     config_path,
                     workspace,
                     runtime.url + "/",
-                    SECRET if bearer_matches else BAD_SECRET,
+                    bearer_token,
                 )
                 bot = Nanobot.from_config(config_path=config_path)
                 result = await bot.run(
@@ -141,7 +144,10 @@ async def stream_nanobot_mcp_scenario(
     *, bearer_matches: bool = True
 ) -> NanobotMcpScenarioResult:
     service = DeterministicHttpMusicService()
-    runtime = MCPRuntime(mcp_settings(reserve_port()), service)
+    runtime, _key_repository, bearer_token = await create_mcp_runtime_with_key(
+        service,
+        reserve_port(),
+    )
     await runtime.start()
     bot: Nanobot | None = None
     previous_base_url = os.environ.get("LLM_BASE_URL")
@@ -149,7 +155,11 @@ async def stream_nanobot_mcp_scenario(
     final_parts: list[str] = []
     try:
         if not bearer_matches:
-            return await _run_bad_bearer_boundary(runtime, service)
+            return await _run_bad_bearer_boundary(
+                runtime,
+                service,
+                f"{bearer_token}-wrong",
+            )
         async with fake_openai_server() as base_url:
             os.environ["LLM_BASE_URL"] = base_url
             with tempfile.TemporaryDirectory(prefix="rosetta-nanobot-") as temp_dir:
@@ -161,7 +171,7 @@ async def stream_nanobot_mcp_scenario(
                     config_path,
                     workspace,
                     runtime.url + "/",
-                    SECRET if bearer_matches else BAD_SECRET,
+                    bearer_token,
                 )
                 bot = Nanobot.from_config(config_path=config_path)
                 async for event in bot.stream(
@@ -200,15 +210,20 @@ async def stream_nanobot_mcp_scenario(
 async def _run_bad_bearer_boundary(
     runtime: MCPRuntime,
     service: DeterministicHttpMusicService,
+    wrong_bearer_token: str,
 ) -> NanobotMcpScenarioResult:
     async with httpx2.AsyncClient(timeout=5, follow_redirects=True) as client:
         response = await client.post(
             runtime.url + "/",
-            headers={"Authorization": f"Bearer {BAD_SECRET}", "Host": "127.0.0.1"},
+            headers={
+                "Authorization": f"Bearer {wrong_bearer_token}",
+                "Host": "127.0.0.1",
+            },
         )
     safe_failure = await _safe_failure_text(
         f"Rosetta MCP returned HTTP {response.status_code}",
         bearer_matches=False,
+        secrets_to_redact=(wrong_bearer_token,),
     )
     return NanobotMcpScenarioResult(
         tool_events=(),
@@ -220,11 +235,18 @@ async def _run_bad_bearer_boundary(
     )
 
 
-async def _safe_failure_text(content: str, bearer_matches: bool) -> str | None:
+async def _safe_failure_text(
+    content: str,
+    bearer_matches: bool,
+    *,
+    secrets_to_redact: tuple[str, ...] = (),
+) -> str | None:
     if bearer_matches:
         return None
     message = mention_message()
     cog = NanobotCog(bot=FakeBot(), policy_repository=enabled_repository())
     await cog.on_message(message)
     surface = "\n".join([content, *message.replies])
-    return surface.replace(SECRET, "<redacted>").replace(BAD_SECRET, "<redacted>")
+    for secret in secrets_to_redact:
+        surface = surface.replace(secret, "<redacted>")
+    return surface

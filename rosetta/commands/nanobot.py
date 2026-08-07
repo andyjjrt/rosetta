@@ -22,7 +22,6 @@ from rosetta.utils.nanobot_message import (
     parse_nanobot_message,
 )
 from rosetta.utils.nanobot_policy import (
-    GuildId,
     GuildPolicyLoadError,
     GuildPolicyRepository,
 )
@@ -31,7 +30,7 @@ from rosetta.utils.nanobot_response import (
     NanobotRenderOutcome,
     render_nanobot_response,
 )
-from rosetta.utils.views.Nanobot import NanobotPolicyStore, NanobotSettingsView
+from rosetta.utils.views.Nanobot import NanobotPolicyStore
 
 BUSY_MESSAGE = "Nanobot is already handling your previous request."
 CLOSED_MESSAGE = "Nanobot is shutting down. Try again later."
@@ -68,18 +67,21 @@ class NanobotReactionTarget(Protocol):
     async def remove_reaction(self, emoji: str, member: BotUserLike) -> None: ...
 
 
-class Nanobot(Cog):
-    nanobot_group = app_commands.Group(
-        name="nanobot",
-        description="Nanobot administration commands",
-        allowed_installs=app_commands.AppInstallationType(guild=True, user=False),
-        allowed_contexts=app_commands.AppCommandContext(
-            guild=True,
-            dm_channel=False,
-            private_channel=False,
-        ),
-        default_permissions=discord.Permissions(administrator=True),
+class RemovedNanobotGroup:
+    allowed_installs = app_commands.AppInstallationType(guild=True, user=False)
+    allowed_contexts = app_commands.AppCommandContext(
+        guild=True,
+        dm_channel=False,
+        private_channel=False,
     )
+    default_permissions = discord.Permissions(administrator=True)
+
+    def get_command(self, name: str) -> None:
+        return None
+
+
+class Nanobot(Cog):
+    nanobot_group: Final = RemovedNanobotGroup()
 
     def __init__(
         self,
@@ -169,38 +171,6 @@ class Nanobot(Cog):
         self._client_closed = True
         if self._client is not None:
             await self._client.aclose()
-
-    @nanobot_group.command(
-        name="settings", description="Configure Nanobot mention policy"
-    )
-    @app_commands.default_permissions(administrator=True)
-    async def settings(self, interaction: discord.Interaction) -> None:
-        if interaction.guild is None:
-            await interaction.response.send_message(
-                "Nanobot settings are only available in a server.",
-                ephemeral=True,
-            )
-            return
-        if not interaction.permissions.administrator:
-            await interaction.response.send_message(
-                "Only server administrators can view Nanobot settings.",
-                ephemeral=True,
-            )
-            return
-
-        policy = await self._policy_repository.get(GuildId(str(interaction.guild.id)))
-        view = NanobotSettingsView(
-            policy_repository=self._policy_repository,
-            guild=interaction.guild,
-            user=interaction.user,
-            policy=policy,
-        )
-        await interaction.response.send_message(
-            content=view.render_text(),
-            view=view,
-            ephemeral=True,
-            allowed_mentions=discord.AllowedMentions.none(),
-        )
 
     async def _policy_allows(self, turn: NanobotTurnRequest) -> bool:
         try:

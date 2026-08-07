@@ -7,11 +7,12 @@ services:
       NANOBOT_MAX_CONCURRENT_RUNS: ${NANOBOT_MAX_CONCURRENT_RUNS:-3}
       NANOBOT_WORKSPACE: /app/.data/nanobot/workspace
       NANOBOT_ROSETTA_MCP_URL: http://127.0.0.1:${MCP_PORT:-8000}${MCP_PATH:-/mcp}/
+      NANOBOT_ROSETTA_MCP_API_KEY: ${NANOBOT_ROSETTA_MCP_API_KEY}
+      SETTING_DATABASE_PATH: /app/.data/settings.sqlite3
       MCP_ENABLED: "true"
       MCP_HOST: 127.0.0.1
       MCP_PORT: ${MCP_PORT:-8000}
       MCP_PATH: ${MCP_PATH:-/mcp}
-      MCP_BEARER_TOKEN: ${MCP_BEARER_TOKEN}
       MCP_ALLOWED_HOSTS: '${MCP_ALLOWED_HOSTS:-["127.0.0.1","localhost"]}'
       LLM_BASE_URL: ${LLM_BASE_URL}
       LLM_API_KEY: ${LLM_API_KEY}

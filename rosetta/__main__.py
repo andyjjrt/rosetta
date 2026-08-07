@@ -1,4 +1,5 @@
 import logging
+from inspect import signature
 from typing import Protocol
 
 import anyio
@@ -12,13 +13,19 @@ from .utils.config import (
     CogConfig,
     CogSetting,
     EmojiConfig,
+    ManagementSetting,
     MCPConfig,
     McpSetting,
     NanobotConfig,
     NanobotSetting,
+    SettingConfig,
 )
 from .utils.embeds import ErrorEmbed
+from .utils.llm_model_access import LlmModelAccessRepository
 from .utils.log import LogContext, PydanticAdapter, setup_logging
+from .utils.mcp_api_keys import McpApiKeyRepository
+from .utils.nanobot_policy import GuildPolicyRepository
+from .utils.settings_store import SettingsDatabase
 
 setup_logging(dev_mode=BotConfig.DEBUG)
 logger = logging.getLogger("rosetta")
@@ -40,11 +47,17 @@ class RosettaBot(commands.Bot):
         cog_config: CogSetting = CogConfig,
         mcp_config: McpSetting = MCPConfig,
         nanobot_config: NanobotSetting = NanobotConfig,
+        setting_config: ManagementSetting = SettingConfig,
     ) -> None:
         super().__init__(command_prefix="!", intents=intents)
         self._cog_config = cog_config
         self._mcp_config = mcp_config
         self._nanobot_config = nanobot_config
+        self._setting_config = setting_config
+        self._settings_database: SettingsDatabase | None = None
+        self._llm_model_access_repository: LlmModelAccessRepository | None = None
+        self._mcp_api_key_repository: McpApiKeyRepository | None = None
+        self._nanobot_policy_repository: GuildPolicyRepository | None = None
         self._mcp_runtime: MCPRuntime | None = None
         self._nanobot_cog: ClosableNanobotCog | None = None
 
@@ -59,10 +72,31 @@ class RosettaBot(commands.Bot):
             raise RuntimeError("MCP_ENABLED requires COG_MUSIC_DISABLE=false")
         self._nanobot_config.validate_startup(self._cog_config)
 
+        self._settings_database = SettingsDatabase(self._setting_config.DATABASE_PATH)
+        self._llm_model_access_repository = LlmModelAccessRepository(
+            self._setting_config.DATABASE_PATH
+        )
+        self._mcp_api_key_repository = McpApiKeyRepository(
+            self._setting_config.DATABASE_PATH
+        )
+        self._nanobot_policy_repository = GuildPolicyRepository(
+            self._nanobot_config.POLICY_PATH
+        )
+
         if not self._cog_config.BASICS_DISABLE:
             from .commands.basics import Basics
 
             await self.add_cog(Basics(self))
+        from .commands.settings import Setting
+
+        await self.add_cog(
+            Setting(
+                self,
+                mcp_api_key_repository=self._mcp_api_key_repository,
+                model_access_repository=self._llm_model_access_repository,
+                nanobot_policy_repository=self._nanobot_policy_repository,
+            )
+        )
         mcp_started_by_this_setup = False
         if not self._cog_config.MUSIC_DISABLE:
             from .commands.music import Music
@@ -71,7 +105,7 @@ class RosettaBot(commands.Bot):
             await self.add_cog(music)
             if self._mcp_config.ENABLED:
                 if self._mcp_runtime is None:
-                    self._mcp_runtime = MCPRuntime(self._mcp_config, music.service)
+                    self._mcp_runtime = self._create_mcp_runtime(music.service)
                     await self._mcp_runtime.start()
                     mcp_started_by_this_setup = True
         if not self._cog_config.NANOBOT_DISABLE:
@@ -85,20 +119,27 @@ class RosettaBot(commands.Bot):
         if not self._cog_config.LLM_DISABLE:
             from .commands.llm import LLM
 
-            await self.add_cog(LLM(self))
+            await self.add_cog(
+                LLM(
+                    self,
+                    model_access_repository=self._llm_model_access_repository,
+                )
+            )
 
     async def _setup_nanobot(self, *, mcp_started_by_this_setup: bool) -> None:
         from .commands.nanobot import Nanobot
         from .utils.nanobot_client import NanobotSdkClient
-        from .utils.nanobot_policy import GuildPolicyRepository
 
         client = None
         cog = None
         added = False
         try:
             client = NanobotSdkClient.create(self._nanobot_config)
-            policy_repository = GuildPolicyRepository(self._nanobot_config.POLICY_PATH)
-            cog = Nanobot(self, policy_repository=policy_repository, client=client)
+            cog = Nanobot(
+                self,
+                policy_repository=self._nanobot_policy_repository,
+                client=client,
+            )
             await self.add_cog(cog)
             added = True
             self._nanobot_cog = cog
@@ -111,6 +152,15 @@ class RosettaBot(commands.Bot):
                 stop_owned_mcp=mcp_started_by_this_setup,
             )
             raise
+
+    def _create_mcp_runtime(self, music_service) -> MCPRuntime:
+        if "api_key_validator" not in signature(MCPRuntime).parameters:
+            return MCPRuntime(self._mcp_config, music_service)
+        return MCPRuntime(
+            self._mcp_config,
+            music_service,
+            api_key_validator=self._mcp_api_key_repository,
+        )
 
     async def _rollback_nanobot_startup(
         self,

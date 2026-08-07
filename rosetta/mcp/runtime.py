@@ -11,7 +11,7 @@ from starlette.applications import Starlette
 from starlette.routing import Mount
 from starlette.types import ASGIApp
 
-from rosetta.mcp.auth import protect_mcp_app
+from rosetta.mcp.auth import McpApiKeyValidator, protect_mcp_app
 from rosetta.mcp.server import McpMusicService, create_mcp_server
 from rosetta.utils.config import McpSetting
 
@@ -51,10 +51,13 @@ class MCPRuntime:
         settings: McpSetting,
         music: McpMusicService,
         server_factory: McpServerFactory = create_mcp_server,
+        *,
+        api_key_validator: McpApiKeyValidator | None = None,
     ) -> None:
         self._settings = settings
         self._music = music
         self._server_factory = server_factory
+        self._api_key_validator = api_key_validator
         self._task: asyncio.Task[None] | None = None
         self._server: uvicorn.Server | None = None
         self._socket: socket.socket | None = None
@@ -161,7 +164,11 @@ class MCPRuntime:
             routes=[Mount(self._settings.PATH, app=streamable_app)],
             lifespan=lifespan,
         )
-        return protect_mcp_app(mounted, self._settings)
+        return protect_mcp_app(
+            mounted,
+            self._settings,
+            key_validator=self._api_key_validator,
+        )
 
     def _config(self, app: ASGIApp) -> uvicorn.Config:
         return uvicorn.Config(

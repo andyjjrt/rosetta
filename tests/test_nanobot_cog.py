@@ -21,7 +21,6 @@ from rosetta.utils.nanobot_response import (
     NanobotRenderingFailure,
     NanobotTextDelta,
 )
-from rosetta.utils.views.Nanobot import NanobotSettingsView
 from tests.nanobot_cog_fakes import (
     BlockingCall,
     BlockingEventStream,
@@ -31,20 +30,14 @@ from tests.nanobot_cog_fakes import (
     FakeBot,
     FakeChannel,
     FakeClient,
-    FakeGuild,
-    FakeInteraction,
     FakeMessage,
-    FakePermissions,
-    FakeUser,
     FakeVoiceState,
     disabled_repository,
     enabled_repository,
     ignore_cases,
     manual_blocked_messages,
     mention_message,
-    mention_policy_is_none,
     reconstructed_text,
-    settings_denials,
     start_failures,
 )
 
@@ -92,57 +85,17 @@ async def cancel_listener_at(
     return cancellations
 
 
-async def test_settings_registration_and_admin_view_behavior_remain_intact() -> None:
-    # Given: Todo 6 registered the Nanobot settings app-command surface.
-    repository = CountingPolicyRepository()
-    cog = Nanobot(bot=None, policy_repository=repository)
-    interaction = FakeInteraction(
-        guild=FakeGuild(id=10),
-        user=FakeUser(id=99),
-        permissions=FakePermissions(administrator=True),
-    )
-
-    # When: an administrator opens /nanobot settings.
-    await cog.settings.callback(cog, interaction)
-
-    # Then: registration metadata, repository access, and safe ephemeral view remain intact.
+async def test_nanobot_group_remains_guild_only_administrator_scoped() -> None:
+    # Given: Nanobot's remaining app-command group is still guild administration scoped.
     group = Nanobot.nanobot_group
-    sent = interaction.response.sent[-1]
+
+    # When / Then: Discord receives the existing guild-only administrator metadata.
     assert group.allowed_installs.guild is True
     assert group.allowed_installs.user is False
     assert group.allowed_contexts.guild is True
     assert group.allowed_contexts.dm_channel is False
     assert group.allowed_contexts.private_channel is False
     assert group.default_permissions == discord.Permissions(administrator=True)
-    assert repository.calls == 1
-    assert sent.ephemeral is True
-    assert isinstance(sent.view, NanobotSettingsView)
-    assert mention_policy_is_none(sent.allowed_mentions)
-    assert sent.content is not None
-    assert "Nanobot settings" in sent.content
-
-
-@pytest.mark.parametrize(
-    "interaction, expected",
-    settings_denials(),
-)
-async def test_settings_runtime_denial_remains_before_repository_access(
-    interaction: FakeInteraction,
-    expected: str,
-) -> None:
-    # Given: a settings invocation is not both guild-scoped and administrator-authorized.
-    repository = CountingPolicyRepository()
-    cog = Nanobot(bot=None, policy_repository=repository)
-
-    # When: the settings command callback runs.
-    await cog.settings.callback(cog, interaction)
-
-    # Then: denial is ephemeral and repository state remains unread.
-    sent = interaction.response.sent[-1]
-    assert repository.calls == 0
-    assert sent.ephemeral is True
-    assert sent.content is not None
-    assert expected in sent.content
 
 
 async def test_listener_is_registered_without_prefix_processing_override() -> None:

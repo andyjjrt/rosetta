@@ -127,6 +127,20 @@ class LavaLinkSetting(BaseSettings):
     K8S_SERVICE_PORT: int = 2333
 
 
+class ManagementSetting(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        env_prefix="SETTING_",
+        extra="ignore",
+    )
+
+    DATABASE_PATH: Path = Path(".data/settings.sqlite3")
+
+
+SettingSetting = ManagementSetting
+
+
 class McpSetting(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", env_prefix="MCP_", extra="ignore"
@@ -143,15 +157,6 @@ class McpSetting(BaseSettings):
         if not self.ENABLED:
             return
 
-        secret = self.BEARER_TOKEN.get_secret_value() if self.BEARER_TOKEN else ""
-        if not secret.strip():
-            raise ValueError("MCP_BEARER_TOKEN is required when MCP_ENABLED is true")
-
-        if len(secret.strip()) < 32:
-            raise ValueError(
-                "MCP_BEARER_TOKEN must be at least 32 characters when MCP_ENABLED is true"
-            )
-
         if not self.PATH.startswith("/") or self.PATH.startswith("//"):
             raise ValueError("MCP_PATH must start with exactly one /")
 
@@ -165,5 +170,6 @@ LLMConfig = LLMSetting()
 LangfuseConfig = LangfuseSetting()
 LavaLinkConfig = LavaLinkSetting()
 CogConfig = CogSetting()
+SettingConfig = ManagementSetting()
 MCPConfig = McpSetting()
 NanobotConfig = NanobotSetting()

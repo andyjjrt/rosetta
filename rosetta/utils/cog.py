@@ -20,7 +20,7 @@ class Cog(commands.Cog):
             adapter = PydanticAdapter(self._logger, ctx_data)
             interaction.extras["logger"] = adapter
 
-            adapter.info(f"Command '{interaction.command.name}' invoked")
+            adapter.info(f"Command '{ctx_data.command}' invoked")
 
         return True
 

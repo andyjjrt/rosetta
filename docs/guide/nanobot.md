@@ -1,6 +1,6 @@
 # Nanobot Setup
 
-Nanobot is disabled by default. Enabling its cog is only the first step: you must also provide its agent configuration, enable the private Rosetta MCP endpoint, and grant each Discord server access through `/nanobot settings`.
+Nanobot is disabled by default. Enabling its cog is only the first step: you must also provide its agent configuration, enable the private Rosetta MCP endpoint, copy a managed MCP API key into the Nanobot config, and grant each Discord server access through `/setting nanobot`.
 
 ## Prerequisites
 
@@ -9,7 +9,7 @@ Before enabling Nanobot, make sure that:
 - Discord's privileged **Message Content Intent** is enabled in the Developer Portal.
 - Rosetta has working Lavalink music playback. Nanobot's MCP tools expose music `search` and `play`.
 - `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_DEFAULT_MODEL` point to a working OpenAI-compatible provider.
-- You can run `/nanobot settings` as a server administrator.
+- You can run `/setting nanobot` as a server administrator.
 
 ## Create the agent configuration
 
@@ -19,7 +19,7 @@ Copy the committed template to an operator-owned, untracked path:
 cp nanobot.config.example.json nanobot.config.json
 ```
 
-The template reads provider, model, workspace, MCP URL, and bearer-token values from environment variables. Its important security defaults are:
+The template reads provider, model, workspace, MCP URL, and managed MCP API key values from environment variables. Its important security defaults are:
 
 - file access is restricted to `NANOBOT_WORKSPACE`;
 - shell execution and web access are disabled;
@@ -38,6 +38,7 @@ NANOBOT_CONFIG_PATH=nanobot.config.json
 NANOBOT_POLICY_PATH=.data/nanobot/guild-policies.json
 NANOBOT_MAX_CONCURRENT_RUNS=3
 NANOBOT_WORKSPACE=.data/nanobot/workspace
+SETTING_DATABASE_PATH=.data/settings.sqlite3
 
 LLM_BASE_URL=https://api.example.com/v1
 LLM_API_KEY=replace-with-provider-key
@@ -47,13 +48,12 @@ MCP_ENABLED=true
 MCP_HOST=127.0.0.1
 MCP_PORT=8000
 MCP_PATH=/mcp
-MCP_BEARER_TOKEN=replace-with-at-least-32-random-characters
 MCP_ALLOWED_HOSTS='["127.0.0.1","localhost"]'
 ```
 
 `NANOBOT_CONFIG_PATH` must exist and be readable when the cog is enabled. The policy file and workspace directories are created as they are used. Keep both under `.data/` so they remain separate from source code and secrets.
 
-The MCP bearer token must match the `Authorization` header expanded into `nanobot.config.json`. Rosetta rejects a missing token or a token shorter than 32 characters when MCP is enabled.
+Bootstrap managed MCP access by starting Rosetta with `MCP_ENABLED=true` and a persistent `SETTING_DATABASE_PATH`, then running `/setting mcp create <name>` as the bot owner. Copy the one-time plaintext key from that response into `nanobot.config.json` as `NANOBOT_ROSETTA_MCP_API_KEY`; Rosetta stores only a hash and cannot reveal the key again.
 
 ## Docker Compose
 
@@ -70,13 +70,13 @@ The overlay:
 - enables Nanobot and the loopback MCP endpoint;
 - passes the existing LLM provider settings through to the agent configuration.
 
-Provide `MCP_BEARER_TOKEN`, `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_DEFAULT_MODEL` in the Compose environment before starting the service.
+Provide `SETTING_DATABASE_PATH`, `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_DEFAULT_MODEL` in the Compose environment before starting the service.
 
 ## Configure a server's guild policy
 
 Guild access is deny-by-default. An enabled cog does not answer anywhere until an administrator configures the server:
 
-1. Run `/nanobot settings` in the Discord server.
+1. Run `/setting nanobot` in the Discord server.
 2. Select **Enable**.
 3. Use **Add text channels** to allow one or more channels.
 4. Mention Rosetta in an allowed channel to verify the policy.
@@ -99,12 +99,12 @@ Rosetta writes the policy atomically to `NANOBOT_POLICY_PATH`. A generated polic
 }
 ```
 
-Guild and channel IDs are decimal strings. Prefer `/nanobot settings` instead of editing this file by hand, especially while Rosetta is running. A missing file is treated as an empty policy where every server is disabled; malformed JSON or an invalid schema makes policy lookups fail closed.
+Guild and channel IDs are decimal strings. Prefer `/setting nanobot` instead of editing this file by hand, especially while Rosetta is running. A missing file is treated as an empty policy where every server is disabled; malformed JSON or an invalid schema makes policy lookups fail closed.
 
 ## Troubleshooting
 
 - **`NANOBOT_CONFIG_PATH` startup error:** confirm that the copied JSON file exists and is readable from the process or container.
-- **Mentions do nothing:** confirm Message Content Intent, then run `/nanobot settings` and check that both the server and parent text channel are enabled.
-- **HTTP 401 from MCP:** the bearer token in the process environment must match the token expanded into the Nanobot configuration.
+- **Mentions do nothing:** confirm Message Content Intent, then run `/setting nanobot` and check that both the server and parent text channel are enabled.
+- **HTTP 401 from MCP:** no managed API key exists yet, or the Nanobot client key was copied incorrectly/revoked/rotated. Run `/setting mcp create <name>` as the bot owner, copy the one-time key into `nanobot.config.json`, and restart the client if needed.
 - **MCP startup rejects allowed hosts:** keep `MCP_ALLOWED_HOSTS` as a single-quoted JSON list in `.env`.
 - **Local URL or SSRF rejection:** keep the client URL on `127.0.0.1` and retain `127.0.0.1/32` in `ssrfWhitelist`.

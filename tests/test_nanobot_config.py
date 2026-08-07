@@ -31,7 +31,7 @@ def nanobot_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("NANOBOT_WORKSPACE", str(tmp_path / "workspace"))
     monkeypatch.setenv("MCP_PORT", "8000")
     monkeypatch.setenv("MCP_PATH", "/mcp")
-    monkeypatch.setenv("MCP_BEARER_TOKEN", "b" * 32)
+    monkeypatch.setenv("NANOBOT_ROSETTA_MCP_API_KEY", "b" * 32)
 
 
 def test_existing_cog_defaults_remain_enabled() -> None:

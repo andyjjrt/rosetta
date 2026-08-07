@@ -24,7 +24,7 @@ class LogContext(BaseModel):
     def from_interaction(cls, interaction: discord.Interaction, **kwargs):
         cmd_name = "unknown"
         if interaction.command:
-            cmd_name = interaction.command.name
+            cmd_name = f"/{interaction.command.qualified_name}"
         elif interaction.data and "custom_id" in interaction.data:
             cmd_name = f"ui:{interaction.data['custom_id']}"
 
@@ -49,6 +49,7 @@ class PydanticAdapter(logging.LoggerAdapter):
         kwargs["extra"] = extra
         return msg, kwargs
 
+
 # --- 1. 自定義 JSON Formatter ---
 class JsonFormatter(logging.Formatter):
     def format(self, record):
@@ -66,15 +67,23 @@ class JsonFormatter(logging.Formatter):
 
         # 動態抓取由 Adapter 注入的欄位 (Context)
         # 這些欄位名稱必須與 LogContext 的欄位名稱一致
-        context_keys = ["request_id", "user_id", "user_name", "guild_id", "channel_id", "command"]
+        context_keys = [
+            "request_id",
+            "user_id",
+            "user_name",
+            "guild_id",
+            "channel_id",
+            "command",
+        ]
         for key in context_keys:
             if hasattr(record, key):
                 log_record[key] = getattr(record, key)
 
         # 處理額外透過 extra={} 傳入的參數
         # (這裡簡化處理，實際專案可能需要排除上面的保留字)
-        
+
         return json.dumps(log_record, ensure_ascii=False)
+
 
 # --- 2. 設定函式 ---
 def setup_logging(dev_mode: bool = True):
@@ -82,7 +91,7 @@ def setup_logging(dev_mode: bool = True):
     初始化 Logging 設定
     :param dev_mode: True 使用人類可讀格式，False 使用 JSON 格式 (適合 Docker/K8s)
     """
-    
+
     # 根據環境選擇 Handler
     active_handler = "console_human" if dev_mode else "console_json"
     active_level = "DEBUG" if dev_mode else "INFO"
@@ -96,7 +105,7 @@ def setup_logging(dev_mode: bool = True):
                 "datefmt": "%Y-%m-%d %H:%M:%S",
             },
             "json": {
-                "()": JsonFormatter, # 引用上面的 Class
+                "()": JsonFormatter,  # 引用上面的 Class
             },
         },
         "handlers": {
@@ -121,12 +130,12 @@ def setup_logging(dev_mode: bool = True):
             # Discord.py 的 Logger (避免太吵，設為 WARNING 或 INFO)
             "discord.client": {
                 "handlers": [active_handler],
-                "level": "WARNING", 
+                "level": "WARNING",
                 "propagate": False,
             },
             "discord.gateway": {
                 "handlers": [active_handler],
-                "level": "WARNING", 
+                "level": "WARNING",
                 "propagate": False,
             },
         },
@@ -134,7 +143,7 @@ def setup_logging(dev_mode: bool = True):
         "root": {
             "handlers": [active_handler],
             "level": "INFO",
-        }
+        },
     }
 
     logging.config.dictConfig(LOGGING_CONFIG)

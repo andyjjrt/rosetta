@@ -1,7 +1,15 @@
+import sys
+
 from .basics import Basics
 from .llm import LLM
 from .music import Music
 from .mygo import Mygo
-from .nanobot import Nanobot
+from .settings import Setting
 
-__all__ = ["Admin", "Basics", "LLM", "Mygo", "Music", "Nanobot"]
+try:
+    from .nanobot import Nanobot
+except ModuleNotFoundError:
+    if "rosetta.commands.nanobot" not in sys.modules:
+        raise
+
+__all__ = ["Admin", "Basics", "LLM", "Mygo", "Music", "Nanobot", "Setting"]

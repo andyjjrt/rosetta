@@ -1,12 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from pathlib import Path
 
 import discord
 import pytest
 
-from rosetta.commands.nanobot import Nanobot
 from rosetta.utils.nanobot_policy import (
     ChannelId,
     GuildId,
@@ -14,6 +12,21 @@ from rosetta.utils.nanobot_policy import (
     GuildPolicyRepository,
 )
 from rosetta.utils.views.Nanobot import NanobotSettingsView
+from tests.nanobot_settings_view_fakes import (
+    CountingPolicyRepository,
+    FakeChannel,
+    FakeGuild,
+    FakeInteraction,
+    FakePermissions,
+    FakeUser,
+    admin_interaction,
+    button,
+    channel_selects,
+    custom_ids,
+    guild,
+    non_admin_interaction,
+    view_text,
+)
 
 pytestmark = pytest.mark.anyio
 
@@ -23,141 +36,25 @@ def anyio_backend() -> str:
     return "asyncio"
 
 
-@dataclass(slots=True)
-class FakePermissions:
-    administrator: bool
-
-
-@dataclass(slots=True)
-class FakeUser:
-    id: int
-
-
-@dataclass(frozen=True, slots=True)
-class FakeChannel:
-    id: int
-    name: str
-    type: discord.ChannelType
-
-
-@dataclass(slots=True)
-class FakeGuild:
-    id: int
-    channels: dict[int, FakeChannel]
-
-    def get_channel(self, channel_id: int) -> FakeChannel | None:
-        return self.channels.get(channel_id)
-
-
-@dataclass(frozen=True, slots=True)
-class SentMessage:
-    content: str | None
-    ephemeral: bool
-    view: discord.ui.View | None
-
-
-@dataclass(slots=True)
-class FakeResponse:
-    sent: list[SentMessage] = field(default_factory=list)
-
-    async def send_message(
-        self,
-        content: str | None = None,
-        *,
-        ephemeral: bool = False,
-        view: discord.ui.View | None = None,
-        allowed_mentions: discord.AllowedMentions | None = None,
-    ) -> None:
-        self.sent.append(SentMessage(content=content, ephemeral=ephemeral, view=view))
-
-    async def edit_message(
-        self,
-        *,
-        content: str | None = None,
-        view: discord.ui.View | None = None,
-        allowed_mentions: discord.AllowedMentions | None = None,
-    ) -> None:
-        return None
-
-
-@dataclass(slots=True)
-class FakeInteraction:
-    guild: FakeGuild | None
-    user: FakeUser
-    permissions: FakePermissions
-    response: FakeResponse = field(default_factory=FakeResponse)
-
-
-class CountingPolicyRepository:
-    def __init__(self) -> None:
-        self.calls = 0
-
-    async def get(self, guild_id: GuildId) -> GuildPolicy:
-        self.calls += 1
-        return GuildPolicy(enabled=False, channel_ids=frozenset())
-
-    async def set_enabled(self, guild_id: GuildId, *, enabled: bool) -> None:
-        self.calls += 1
-
-    async def add_channel(self, guild_id: GuildId, channel_id: ChannelId) -> None:
-        self.calls += 1
-
-    async def remove_channel(self, guild_id: GuildId, channel_id: ChannelId) -> None:
-        self.calls += 1
-
-
 def policy_path(tmp_path: Path) -> Path:
     return tmp_path / "guild-policies.json"
-
-
-def guild(*channels: FakeChannel) -> FakeGuild:
-    return FakeGuild(id=10, channels={channel.id: channel for channel in channels})
-
-
-def admin_interaction(server: FakeGuild | None) -> FakeInteraction:
-    return FakeInteraction(server, FakeUser(id=99), FakePermissions(administrator=True))
-
-
-def non_admin_interaction(server: FakeGuild | None) -> FakeInteraction:
-    return FakeInteraction(
-        server, FakeUser(id=13), FakePermissions(administrator=False)
-    )
-
-
-def view_text(view: NanobotSettingsView) -> str:
-    return view.render_text()
-
-
-def custom_ids(view: NanobotSettingsView) -> set[str]:
-    return {item.custom_id for item in view.children if item.custom_id is not None}
-
-
-def channel_selects(view: NanobotSettingsView) -> list[discord.ui.ChannelSelect]:
-    return [
-        item for item in view.children if isinstance(item, discord.ui.ChannelSelect)
-    ]
 
 
 async def open_settings(
     repository: GuildPolicyRepository,
     server: FakeGuild,
 ) -> NanobotSettingsView:
-    cog = Nanobot(bot=None, policy_repository=repository)
-    interaction = admin_interaction(server)
-
-    await cog.settings.callback(cog, interaction)
-
-    sent = interaction.response.sent[-1]
-    assert sent.ephemeral is True
-    assert isinstance(sent.view, NanobotSettingsView)
-    return sent.view
+    policy = await repository.get(GuildId(str(server.id)))
+    return NanobotSettingsView(
+        policy_repository=repository,
+        guild=server,
+        user=FakeUser(id=99),
+        policy=policy,
+    )
 
 
-async def test_command_is_guild_install_guild_context_and_administrator_default() -> (
-    None
-):
-    # Given: the Nanobot command group and settings view are constructed.
-    group = Nanobot.nanobot_group
+async def test_view_uses_text_only_batch_controls() -> None:
+    # Given: a Nanobot settings view is constructed.
     view = NanobotSettingsView(
         policy_repository=CountingPolicyRepository(),
         guild=guild(),
@@ -165,13 +62,10 @@ async def test_command_is_guild_install_guild_context_and_administrator_default(
         policy=GuildPolicy(enabled=False, channel_ids=frozenset()),
     )
 
-    # When / Then: Discord receives guild-only admin metadata and text-only batch controls.
-    assert group.allowed_installs.guild is True
-    assert group.allowed_installs.user is False
-    assert group.allowed_contexts.guild is True
-    assert group.allowed_contexts.dm_channel is False
-    assert group.allowed_contexts.private_channel is False
-    assert group.default_permissions == discord.Permissions(administrator=True)
+    # When / Then: Discord receives one Components v2 container with nested controls.
+    assert isinstance(view, discord.ui.LayoutView)
+    assert len(view.children) == 1
+    assert isinstance(view.children[0], discord.ui.Container)
     selects = channel_selects(view)
     assert len(selects) == 2
     assert {select.custom_id for select in selects} == {
@@ -183,18 +77,109 @@ async def test_command_is_guild_install_guild_context_and_administrator_default(
     assert {"nanobot_enable", "nanobot_disable"}.issubset(custom_ids(view))
 
 
+async def test_view_renders_status_empty_warning_and_contentless_refresh(
+    tmp_path: Path,
+) -> None:
+    # Given: a disabled empty policy displayed in a Components v2 view.
+    repository = GuildPolicyRepository(policy_path(tmp_path))
+    server = guild()
+    view = await open_settings(repository, server)
+    interaction = admin_interaction(server)
+    assert "Nanobot settings" in view_text(view)
+    assert "Status: **Disabled**" in view_text(view)
+    assert "Allowed channels: none" in view_text(view)
+    assert "Page 1/1" in view_text(view)
+
+    # When: the administrator enables the empty policy.
+    await view.enable(interaction)
+
+    # Then: status, warning, controls, and the contentless mention-safe edit refresh.
+    assert "Status: **Enabled**" in view_text(view)
+    assert "mentions will not be handled" in view_text(view)
+    assert button(view, "nanobot_enable").disabled is True
+    assert button(view, "nanobot_disable").disabled is False
+    edit = interaction.response.edits[-1]
+    assert edit.content is None
+    assert edit.view is view
+    assert edit.allowed_mentions is not None
+    assert edit.allowed_mentions.to_dict() == {"parse": []}
+
+
+async def test_allowed_channels_paginate_five_at_a_time_and_recheck_access(
+    tmp_path: Path,
+) -> None:
+    # Given: seven allowed channels including escaped display data and one missing channel.
+    repository = GuildPolicyRepository(policy_path(tmp_path))
+    channels = tuple(
+        FakeChannel(
+            id=channel_id,
+            name=(
+                "team_*ops*@everyone" if channel_id == 20 else f"channel-{channel_id}"
+            ),
+            type=discord.ChannelType.text,
+        )
+        for channel_id in range(20, 26)
+    )
+    server = guild(*channels)
+    await repository.set_enabled(GuildId("10"), enabled=True)
+    for channel_id in range(20, 27):
+        await repository.add_channel(GuildId("10"), ChannelId(str(channel_id)))
+    view = await open_settings(repository, server)
+
+    # When / Then: page one contains five escaped rows and deterministic page controls.
+    first_page = view_text(view)
+    assert "team\\_\\*ops\\*@everyone" not in first_page
+    assert "team\\_\\*ops\\*@\u200beveryone" in first_page
+    assert "channel-24" in first_page
+    assert "channel-25" not in first_page
+    assert "Page 1/2" in first_page
+    assert {"nanobot_previous", "nanobot_next"}.issubset(custom_ids(view))
+    assert button(view, "nanobot_previous").disabled is True
+    assert button(view, "nanobot_next").disabled is False
+
+    # When: the opening administrator moves to the next page.
+    page_interaction = admin_interaction(server)
+    await view.go_next(page_interaction)
+
+    # Then: the remaining real and fallback channels render with stable bounds.
+    second_page = view_text(view)
+    assert "channel-25" in second_page
+    assert "channel `26`" in second_page
+    assert "Page 2/2" in second_page
+    assert button(view, "nanobot_previous").disabled is False
+    assert button(view, "nanobot_next").disabled is True
+
+    # When: a non-owner administrator attempts to page.
+    intruder = FakeInteraction(
+        guild=server,
+        user=FakeUser(id=100),
+        permissions=FakePermissions(administrator=True),
+    )
+    await view.go_previous(intruder)
+
+    # Then: authorization is rechecked and neither page nor message changes.
+    assert view_text(view) == second_page
+    assert intruder.response.edits == []
+    assert intruder.response.sent[-1].ephemeral is True
+
+
 @pytest.mark.parametrize(
     "interaction", [non_admin_interaction(guild()), admin_interaction(None)]
 )
-async def test_command_denies_before_repository_read_when_not_admin_or_not_guild(
+async def test_view_callback_denies_before_repository_read_when_not_admin_or_not_guild(
     interaction: FakeInteraction,
 ) -> None:
-    # Given: a command invocation that is not both guild-scoped and administrator-authorized.
+    # Given: a callback invocation that is not both guild-scoped and administrator-authorized.
     repository = CountingPolicyRepository()
-    cog = Nanobot(bot=None, policy_repository=repository)
+    view = NanobotSettingsView(
+        policy_repository=repository,
+        guild=guild(),
+        user=interaction.user,
+        policy=GuildPolicy(enabled=False, channel_ids=frozenset()),
+    )
 
-    # When: the settings command runs.
-    await cog.settings.callback(cog, interaction)
+    # When: the settings callback runs.
+    await view.enable(interaction)
 
     # Then: the response is ephemeral and the repository is never touched.
     assert repository.calls == 0
@@ -305,7 +290,7 @@ async def test_manual_qa_admin_sequence_reopen_and_non_admin_zero_calls(
         FakeChannel(id=30, name="ops", type=discord.ChannelType.text),
     )
 
-    # When: admin enables, adds 20/30, reopens, removes 20, and non-admins try command/callback.
+    # When: admin enables, adds 20/30, reopens, removes 20, and a non-admin tries a callback.
     view = await open_settings(repository, server)
     await view.enable(admin_interaction(server))
     await view.add_channels(admin_interaction(server), tuple(server.channels.values()))
@@ -313,9 +298,6 @@ async def test_manual_qa_admin_sequence_reopen_and_non_admin_zero_calls(
     await reopened.remove_channels(admin_interaction(server), (server.channels[20],))
 
     blocked_repository = CountingPolicyRepository()
-    blocked_cog = Nanobot(bot=None, policy_repository=blocked_repository)
-    blocked_command = non_admin_interaction(server)
-    await blocked_cog.settings.callback(blocked_cog, blocked_command)
     blocked_view = NanobotSettingsView(
         policy_repository=blocked_repository,
         guild=server,
@@ -326,14 +308,13 @@ async def test_manual_qa_admin_sequence_reopen_and_non_admin_zero_calls(
     await blocked_view.enable(blocked_callback)
 
     # Then: the final surface shows only channel 30 and prints manual QA checks.
-    ephemeral = blocked_command.response.sent[-1].ephemeral
     invoker_check = await blocked_view.interaction_check(blocked_callback)
-    print(f"ephemeral={ephemeral}")
+    print(f"ephemeral={blocked_callback.response.sent[-1].ephemeral}")
     print(f"invoker_check={invoker_check}")
     print(f"state={view_text(reopened)}")
     print(f"non_admin_repository_calls={blocked_repository.calls}")
     assert "ops" in view_text(reopened)
     assert "general" not in view_text(reopened)
-    assert ephemeral is True
+    assert blocked_callback.response.sent[-1].ephemeral is True
     assert invoker_check is True
     assert blocked_repository.calls == 0

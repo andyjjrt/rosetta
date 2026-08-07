@@ -3,14 +3,15 @@ from __future__ import annotations
 import json
 import re
 import socket
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Final
 
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
-from pydantic import SecretStr
 
+from rosetta.mcp.runtime import MCPRuntime
 from rosetta.models.music import (
     MusicFailure,
     PlayRequest,
@@ -21,8 +22,8 @@ from rosetta.models.music import (
     TrackSummary,
 )
 from rosetta.utils.config import McpSetting
+from rosetta.utils.mcp_api_keys import McpApiKeyRepository
 
-SECRET: Final = "private-test-token-that-is-long-enough"
 REDACTED_SECRET: Final = "<redacted>"
 SNIPPET_PATTERN: Final = re.compile(
     r"```python\n(?P<code># mcp-client-snippet:start\n.*?# mcp-client-snippet:end)\n```",
@@ -94,19 +95,34 @@ def mcp_settings(port: int) -> McpSetting:
         HOST="127.0.0.1",
         PORT=port,
         PATH="/mcp",
-        BEARER_TOKEN=SecretStr(SECRET),
         ALLOWED_HOSTS=["127.0.0.1", "localhost"],
         _env_file=None,
     )
 
 
+async def create_mcp_runtime_with_key(
+    service: DeterministicHttpMusicService,
+    port: int,
+) -> tuple[MCPRuntime, McpApiKeyRepository, str]:
+    key_repository = McpApiKeyRepository(
+        Path(tempfile.mkdtemp(prefix="rosetta-mcp-keys-")) / "settings.sqlite3"
+    )
+    created_key = await key_repository.create("integration-test")
+    runtime = MCPRuntime(
+        mcp_settings(port),
+        service,
+        api_key_validator=key_repository,
+    )
+    return runtime, key_repository, created_key.plaintext_key
+
+
 async def call_tool(
-    url: str, name: str, arguments: dict[str, str | int]
+    url: str, bearer_token: str, name: str, arguments: dict[str, str | int]
 ) -> dict[str, object]:
     import httpx2
 
     async with httpx2.AsyncClient(
-        headers={"Authorization": f"Bearer {SECRET}"},
+        headers={"Authorization": f"Bearer {bearer_token}"},
         timeout=httpx2.Timeout(30.0, read=300.0),
         follow_redirects=True,
     ) as http_client:

@@ -43,6 +43,14 @@ Generate GIFs from MyGO!!!!! anime scenes.
 |---------|-------------|
 | `/ping` | Check bot / Lavalink node latency |
 | `/version` | Show bot version, Python/discord.py versions (admins see extended stats) |
+| `/setting mcp create <name>` | Create a managed MCP API key and show its one-time plaintext value (owner only) |
+| `/setting mcp list` | List managed MCP API key names, prefixes, fingerprints, and timestamps (owner only) |
+| `/setting mcp rotate <name>` | Rotate a managed MCP API key and show its one-time replacement value (owner only) |
+| `/setting mcp delete <name>` | Revoke a managed MCP API key (owner only) |
+| `/setting llm add <user_id>` | Allow a user to select any available model in `/llm chat` (owner only) |
+| `/setting llm remove <user_id>` | Revoke a user's model selection access (owner only) |
+| `/setting llm list` | List users allowed to select models (owner only) |
+| `/setting nanobot` | Configure Nanobot guild/channel policy (owner only) |
 | `!guilds` | List all guilds the bot is in (owner only, prefix command) |
 | `!reload_nodes` | Reload Lavalink nodes (owner only, prefix command) |
 
@@ -73,11 +81,11 @@ Configuration is done via **environment variables**:
 | `LANGFUSE_PUBLIC_KEY` | Langfuse public key |
 | `LANGFUSE_SECRET_KEY` | Langfuse secret key |
 | `LANGFUSE_HOST` | Langfuse host URL |
+| `SETTING_DATABASE_PATH` | Managed settings SQLite database path (default: `.data/settings.sqlite3`) |
 | `MCP_ENABLED` | Enable the private MCP Streamable HTTP endpoint (`false` by default) |
 | `MCP_HOST` | Bind host for the MCP listener (default: `127.0.0.1`) |
 | `MCP_PORT` | Bind port for the MCP listener (default: `8000`) |
 | `MCP_PATH` | MCP mount path, starting with one `/` (default: `/mcp`) |
-| `MCP_BEARER_TOKEN` | Required bearer secret when MCP is enabled; at least 32 characters |
 | `MCP_ALLOWED_HOSTS` | JSON list of accepted HTTP Host values, e.g. `["127.0.0.1", "localhost"]` |
 | `COG_NANOBOT_DISABLE` | Set `false` to enable Nanobot mention/reply responses (default: `true`) |
 | `NANOBOT_CONFIG_PATH` | Nanobot config path inside the runtime container or process |
@@ -88,7 +96,17 @@ Configuration is done via **environment variables**:
 
 ### Private MCP search/play endpoint
 
-MCP is disabled by default and is intended only for a private operator network or sidecar path. It is not an internet-facing API boundary. When `MCP_ENABLED=true`, set a high-entropy `MCP_BEARER_TOKEN`; clients must send `Authorization: Bearer <token>`, and Rosetta rejects missing or wrong credentials with HTTP 401 before MCP dispatch. Shutdown is managed with the bot lifecycle, so closing Rosetta requests graceful Streamable HTTP listener cleanup.
+MCP is disabled by default and is intended only for a private operator network or sidecar path. It is not an internet-facing API boundary. When `MCP_ENABLED=true`, Rosetta authenticates clients with managed API keys stored in `SETTING_DATABASE_PATH`; clients must send `Authorization: Bearer <key>`, and Rosetta rejects missing, wrong, or zero-configured keys with HTTP 401 before MCP dispatch. Shutdown is managed with the bot lifecycle, so closing Rosetta requests graceful Streamable HTTP listener cleanup.
+
+Bootstrap and manage MCP client keys through Discord after the bot starts. Only the bot owner can manage `/setting` commands:
+
+1. Start Rosetta with `MCP_ENABLED=true` and a persistent `SETTING_DATABASE_PATH`.
+2. As the bot owner, run `/setting mcp create <name>`.
+3. Copy the one-time `rst_mcp_...` key from the ephemeral response into the MCP client configuration. Rosetta stores only a hash and cannot reveal the key again.
+4. Use `/setting mcp rotate <name>` to replace a key; copy the one-time replacement immediately and update clients.
+5. Use `/setting mcp delete <name>` to revoke a key.
+
+`/setting mcp list` shows only metadata: key name, shortened visible prefix, fingerprint, and timestamps. Create and rotate responses are the only time plaintext keys are displayed.
 
 The endpoint is stable MCP v1 Streamable HTTP, stateless JSON, mounted at `http://<MCP_HOST>:<MCP_PORT><MCP_PATH>/`. It exposes exactly two tools:
 
@@ -161,9 +179,9 @@ async def run_mcp_search_play(
 
 ### Nanobot Discord agent
 
-Nanobot is disabled by default. When enabled, Rosetta accepts three non-empty guild invocation forms: a direct mention such as `@Rosetta search for city pop`, a reply to another user's message that explicitly mentions Rosetta, or a direct reply to Rosetta without another mention. Replies to other users include the referenced author's ID and message content in the Nanobot prompt. DMs, bot/webhook messages, disabled guilds, disabled channels, and ordinary replies without a Rosetta mention are ignored. A server administrator must run `/nanobot settings`, enable the guild, and add the text channels where Nanobot is allowed. Threads inherit the parent channel's allow/deny policy but keep separate conversation history.
+Nanobot is disabled by default. When enabled, Rosetta accepts three non-empty guild invocation forms: a direct mention such as `@Rosetta search for city pop`, a reply to another user's message that explicitly mentions Rosetta, or a direct reply to Rosetta without another mention. Replies to other users include the referenced author's ID and message content in the Nanobot prompt. DMs, bot/webhook messages, disabled guilds, disabled channels, and ordinary replies without a Rosetta mention are ignored. The bot owner must run `/setting nanobot`, enable the guild, and add the text channels where Nanobot is allowed. Threads inherit the parent channel's allow/deny policy but keep separate conversation history.
 
-Discord's **Message Content Intent** is required because mention prompts are read from message text. Enable the privileged intent in the Discord Developer Portal and in your deployment before turning on Nanobot. The settings UI is Administrator-only and never displays Nanobot config, provider keys, or MCP bearer secrets.
+Discord's **Message Content Intent** is required because mention prompts are read from message text. Enable the privileged intent in the Discord Developer Portal and in your deployment before turning on Nanobot. The settings UI is owner-only and never displays Nanobot config, provider keys, or MCP API keys.
 
 Use the committed `nanobot.config.example.json` as a template, not as a secret-bearing runtime file:
 
@@ -179,7 +197,9 @@ Required Nanobot deployment values:
 - `NANOBOT_CONFIG_PATH=/app/nanobot.config.json`
 - `NANOBOT_WORKSPACE=/app/.data/nanobot/workspace`
 - `NANOBOT_ROSETTA_MCP_URL=http://127.0.0.1:${MCP_PORT:-8000}${MCP_PATH:-/mcp}/`
-- `MCP_ENABLED=true`, `MCP_HOST=127.0.0.1`, `MCP_PORT`, `MCP_PATH`, `MCP_BEARER_TOKEN`, and `MCP_ALLOWED_HOSTS`
+- `NANOBOT_ROSETTA_MCP_API_KEY=<one-time key copied from /setting mcp create or rotate>`
+- `SETTING_DATABASE_PATH=/app/.data/settings.sqlite3`
+- `MCP_ENABLED=true`, `MCP_HOST=127.0.0.1`, `MCP_PORT`, `MCP_PATH`, and `MCP_ALLOWED_HOSTS`
 - Existing provider values: `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_DEFAULT_MODEL`
 
 Start Rosetta with Nanobot using both Compose files:
@@ -188,15 +208,15 @@ Start Rosetta with Nanobot using both Compose files:
 docker compose -f docker-compose.yml -f docker-compose.nanobot.yaml up -d
 ```
 
-Music and MCP are startup dependencies for Nanobot. Music must remain enabled because Rosetta's MCP tools expose music `search`/`play`, and MCP must be enabled with a high-entropy bearer token before Nanobot can use those tools. Nanobot file tools are constrained to `NANOBOT_WORKSPACE`; keep that workspace under `.data/` so it is isolated from source, `.env`, the read-only Nanobot config, and guild policy internals.
+Music and MCP are startup dependencies for Nanobot. Music must remain enabled because Rosetta's MCP tools expose music `search`/`play`, and MCP must be enabled with at least one managed API key before Nanobot can use those tools. Nanobot file tools are constrained to `NANOBOT_WORKSPACE`; keep that workspace under `.data/` so it is isolated from source, `.env`, the read-only Nanobot config, and guild policy internals.
 
 Troubleshooting:
 
 - Missing provider env: if Nanobot reports an unresolved `${LLM_*}` variable, set `LLM_BASE_URL`, `LLM_API_KEY`, and `LLM_DEFAULT_MODEL` in the Compose environment used by Rosetta.
-- HTTP 401 from MCP: `MCP_BEARER_TOKEN` must match the bearer header in `nanobot.config.json`; rotate both together and never paste the token into Discord.
+- HTTP 401 from MCP: the Nanobot client key is missing, was copied incorrectly, was revoked with `/setting mcp delete`, or was replaced by `/setting mcp rotate`. Create or rotate a key as the bot owner, copy the one-time value into the client configuration, and restart the client if needed. If no managed keys exist, MCP intentionally returns 401 for every bearer credential.
 - SSRF/local URL blocked: the Nanobot config must whitelist `127.0.0.1/32` for loopback MCP only. Do not broaden this unless you understand Nanobot's SSRF guard.
 - `0.0.0.0` misuse: bind addresses may use `0.0.0.0`, but client URLs must not. `NANOBOT_ROSETTA_MCP_URL` and the Nanobot MCP server URL must use `http://127.0.0.1:...`, not `http://0.0.0.0:...`.
-- Disabled channels: if mentions or replies do nothing, run `/nanobot settings`, confirm the guild is enabled, and add the parent text channel for threads.
+- Disabled channels: if mentions or replies do nothing, run `/setting nanobot`, confirm the guild is enabled, and add the parent text channel for threads.
 
 ### Discord Application Emojis
 
@@ -244,9 +264,11 @@ services:
       LAVALINK_PORT: 2333
       LAVALINK_PASSWORD: ${LAVALINK_PASSWORD:-youshallnotpass}
       LAVALINK_LOCAL_NODE_COUNT: 1
+      SETTING_DATABASE_PATH: ${SETTING_DATABASE_PATH:-/app/.data/settings.sqlite3}
     volumes:
       - ./music:/app/music
       - ./mygo-ave-video:/app/mygo-ave-video
+      - ./.data:/app/.data
 
   lavalink:
     image: ghcr.io/lavalink-devs/lavalink:4.2.2-alpine

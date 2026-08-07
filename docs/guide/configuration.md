@@ -68,7 +68,7 @@ Nanobot's Rosetta tools require the private MCP endpoint:
 | `MCP_HOST` | MCP bind address | `127.0.0.1` |
 | `MCP_PORT` | MCP listener port | `8000` |
 | `MCP_PATH` | Streamable HTTP mount path | `/mcp` |
-| `MCP_BEARER_TOKEN` | Shared bearer secret; at least 32 characters when enabled | None |
+| `SETTING_DATABASE_PATH` | Managed settings SQLite database path for MCP API keys | `.data/settings.sqlite3` |
 | `MCP_ALLOWED_HOSTS` | Accepted HTTP Host values as a quoted JSON list | `["127.0.0.1","localhost"]` |
 
 ## Example `.env` File

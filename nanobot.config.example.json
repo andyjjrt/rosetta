@@ -51,7 +51,7 @@
       "rosetta": {
         "url": "http://127.0.0.1:${MCP_PORT}${MCP_PATH}/",
         "headers": {
-          "Authorization": "Bearer ${MCP_BEARER_TOKEN}"
+          "Authorization": "Bearer ${NANOBOT_ROSETTA_MCP_API_KEY}"
         },
         "enabledTools": ["search", "play"]
       }

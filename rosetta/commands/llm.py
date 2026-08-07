@@ -3,9 +3,10 @@ from discord import app_commands
 from discord.ext import commands
 
 from ..utils.cog import Cog
-from ..utils.config import LLMConfig
+from ..utils.config import LLMConfig, SettingConfig
 from ..utils.embeds import InfoEmbed
 from ..utils.langfuse import TraceRequest, create_async_openai, trace_request
+from ..utils.llm_model_access import LlmModelAccessRepository
 from ..utils.views.Image import ImageView
 from ..utils.views.LLM import LLMView
 
@@ -24,25 +25,23 @@ DISCORD_CHAR_LIMIT = 2000
 SAFE_SPLIT_LIMIT = 1980
 
 
-async def get_models_autocomplete(
-    interaction: discord.Interaction, current: str
-) -> list[app_commands.Choice[str]]:
-    # Only show all models to bot owner, others get default model only
-    is_owner = await interaction.client.is_owner(interaction.user)
-    if not is_owner:
-        default_model = LLMConfig.DEFAULT_MODEL
-        if default_model and current.lower() in default_model.lower():
-            return [app_commands.Choice(name=default_model, value=default_model)]
-        return []
-
-    models_list = await client.models.list()
-    models = [m.id for m in models_list.data]
-    return [app_commands.Choice(name=m, value=m) for m in models if current in m][:25]
-
-
 class LLM(Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(
+        self,
+        bot: commands.Bot,
+        *,
+        model_access_repository: LlmModelAccessRepository | None = None,
+    ) -> None:
         super().__init__(bot)
+        self._model_access_repository = (
+            model_access_repository
+            or LlmModelAccessRepository(SettingConfig.DATABASE_PATH)
+        )
+
+    async def can_select_model(self, interaction: discord.Interaction) -> bool:
+        if await self.bot.is_owner(interaction.user):
+            return True
+        return await self._model_access_repository.is_allowed(interaction.user.id)
 
     llm_group = app_commands.Group(
         name="llm",
@@ -66,9 +65,8 @@ class LLM(Cog):
     @app_commands.describe(
         prompt="Your prompt",
         image="Image attachment for vision models",
-        model="Model to use (owner only)",
+        model="Model to use (owner or allowlisted users)",
     )
-    @app_commands.autocomplete(model=get_models_autocomplete)
     async def chat(
         self,
         interaction: discord.Interaction,
@@ -83,9 +81,7 @@ class LLM(Cog):
             )
             return
 
-        # Only bot owner can select model, others use default
-        is_owner = await self.bot.is_owner(interaction.user)
-        if model is None or not is_owner:
+        if model is None or not await self.can_select_model(interaction):
             model = LLMConfig.DEFAULT_MODEL
         await interaction.response.defer()
 
@@ -152,6 +148,27 @@ class LLM(Cog):
 
             if root_span is not None:
                 root_span.update(output=view.full_response)
+
+    @chat.autocomplete("model")
+    async def model_autocomplete(
+        self,
+        interaction: discord.Interaction,
+        current: str,
+    ) -> list[app_commands.Choice[str]]:
+        if not await self.can_select_model(interaction):
+            default_model = LLMConfig.DEFAULT_MODEL
+            if default_model and current.lower() in default_model.lower():
+                return [app_commands.Choice(name=default_model, value=default_model)]
+            return []
+
+        models_list = await client.models.list()
+        models = [model.id for model in models_list.data]
+        current_lower = current.lower()
+        return [
+            app_commands.Choice(name=model, value=model)
+            for model in models
+            if current_lower in model.lower()
+        ][:25]
 
     @llm_group.command(
         name="image",

@@ -7,13 +7,13 @@ import types
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import anyio
 import httpx
 import pytest
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
-from pydantic import SecretStr
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response
@@ -28,10 +28,9 @@ from rosetta.models.music import (
     TrackSummary,
 )
 from rosetta.utils.config import CogSetting, McpSetting
+from rosetta.utils.mcp_api_keys import McpApiKeyRepository
 
 pytestmark = pytest.mark.anyio
-
-SECRET = "private-test-token-that-is-long-enough"
 
 
 @pytest.fixture
@@ -101,7 +100,6 @@ def mcp_settings(*, enabled: bool = True, port: int = 0) -> McpSetting:
         HOST="127.0.0.1",
         PORT=port,
         PATH="/mcp",
-        BEARER_TOKEN=SecretStr(SECRET),
         ALLOWED_HOSTS=["127.0.0.1"],
         _env_file=None,
     )
@@ -132,13 +130,19 @@ async def test_disabled_start_opens_no_listener() -> None:
     await assert_refused(port)
 
 
-async def test_enabled_authenticated_initialize_list_and_sentinel_are_concurrent() -> (
-    None
-):
+async def test_enabled_authenticated_initialize_list_and_sentinel_are_concurrent(
+    tmp_path: Path,
+) -> None:
     from rosetta.mcp.runtime import MCPRuntime
 
     port = reserve_port()
-    runtime = MCPRuntime(mcp_settings(port=port), DeterministicMusicService())
+    key_repository = McpApiKeyRepository(tmp_path / "settings.sqlite3")
+    created_key = await key_repository.create("runtime-test")
+    runtime = MCPRuntime(
+        mcp_settings(port=port),
+        DeterministicMusicService(),
+        api_key_validator=key_repository,
+    )
 
     async with anyio.create_task_group() as task_group:
         await runtime.start()
@@ -153,7 +157,7 @@ async def test_enabled_authenticated_initialize_list_and_sentinel_are_concurrent
             with anyio.fail_after(1):
                 assert await receive.receive() == "bot-side-progress"
         async with httpx.AsyncClient(
-            headers={"authorization": f"Bearer {SECRET}"},
+            headers={"authorization": f"Bearer {created_key.plaintext_key}"},
             timeout=5,
         ) as client:
             async with streamable_http_client(
