@@ -121,6 +121,30 @@ async def test_list_tools_returns_exact_names_and_schemas() -> None:
         "title": "playArguments",
         "type": "object",
     }
+    assert "keyword: Words to search for." in tools["search"].description
+    assert (
+        "limit: Maximum number of tracks to return, from 1 to 25."
+        in tools["search"].description
+    )
+    assert (
+        "user_id: Decimal Discord ID of the user whose voice channel to use."
+        in tools["play"].description
+    )
+    assert (
+        "chat_channel_id: Decimal Discord chat channel ID used to locate the guild."
+        in tools["play"].description
+    )
+    assert "url: Playable YouTube URL to add to the queue." in tools["play"].description
+    assert "loop: Loop mode: Off, One, or Queue." in tools["play"].description
+    assert "shuffle: Whether to shuffle the added tracks." in tools["play"].description
+    assert (
+        "top: Whether to add the tracks to the front of the queue."
+        in tools["play"].description
+    )
+    assert (
+        "node_name: Optional Lavalink node name to use for playback."
+        in tools["play"].description
+    )
     assert tools["search"].outputSchema["properties"] == {
         "result": {"$ref": "#/$defs/SearchResult"}
     }

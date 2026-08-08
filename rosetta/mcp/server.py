@@ -34,6 +34,12 @@ def create_mcp_server(
         keyword: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)],
         limit: Annotated[int, Field(ge=1, le=25)] = 10,
     ) -> SearchResult:
+        """Search YouTube for playable tracks.
+
+        Args:
+            keyword: Words to search for.
+            limit: Maximum number of tracks to return, from 1 to 25.
+        """
         return await music.search(keyword, limit)
 
     @app.tool(name="play", structured_output=True)
@@ -46,6 +52,17 @@ def create_mcp_server(
         top: bool = False,
         node_name: str | None = None,
     ) -> PlayResult:
+        """Play a URL in the specified user's current voice channel.
+
+        Args:
+            user_id: Decimal Discord ID of the user whose voice channel to use.
+            chat_channel_id: Decimal Discord chat channel ID used to locate the guild.
+            url: Playable YouTube URL to add to the queue.
+            loop: Loop mode: Off, One, or Queue.
+            shuffle: Whether to shuffle the added tracks.
+            top: Whether to add the tracks to the front of the queue.
+            node_name: Optional Lavalink node name to use for playback.
+        """
         request = PlayRequest(
             user_id=user_id,
             chat_channel_id=chat_channel_id,
