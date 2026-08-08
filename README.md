@@ -118,7 +118,7 @@ The endpoint is stable MCP v1 Streamable HTTP, stateless JSON, mounted at `http:
   },
   "play": {
     "user_id": "decimal string Discord user ID",
-    "voice_channel_id": "decimal string Discord voice channel ID",
+    "chat_channel_id": "decimal string Discord chat channel ID",
     "url": "string, trimmed, min length 1",
     "loop": "Off | One | Queue, default Off",
     "shuffle": "boolean, default false",
@@ -128,7 +128,7 @@ The endpoint is stable MCP v1 Streamable HTTP, stateless JSON, mounted at `http:
 }
 ```
 
-`search` returns `{status:"success", ok:true, tracks:[{title, author, duration_ms, uri, thumbnail}]}`. Feed a returned `tracks[0].uri` to `play`; Discord IDs must stay JSON strings, not numbers. Expected music failures are structured tool results with `{status:"failure", ok:false, code, message}`. Common operator-relevant codes are `player_channel_conflict` when the guild player is already in another voice channel, `user_not_in_channel` when the requested user/channel do not match cached Discord voice state, and `music_backend_unavailable` when no Lavalink node is ready. Malformed tool input remains an MCP validation error.
+`search` returns `{status:"success", ok:true, tracks:[{title, author, duration_ms, uri, thumbnail}]}`. Feed a returned `tracks[0].uri` to `play`; Discord IDs must stay JSON strings, not numbers. The chat channel identifies the guild, and playback targets the specified user's current voice channel. Expected music failures are structured tool results with `{status:"failure", ok:false, code, message}`. Common operator-relevant codes are `player_channel_conflict` when the guild player is already in another voice channel, `user_not_in_channel` when the requested user is not connected to voice, and `music_backend_unavailable` when no Lavalink node is ready. Malformed tool input remains an MCP validation error.
 
 ```python
 # mcp-client-snippet:start
@@ -143,7 +143,7 @@ async def run_mcp_search_play(
     bearer_token: str,
     keyword: str,
     user_id: str,
-    voice_channel_id: str,
+    chat_channel_id: str,
 ) -> dict[str, object]:
     import httpx2
 
@@ -165,7 +165,7 @@ async def run_mcp_search_play(
                     "play",
                     {
                         "user_id": user_id,
-                        "voice_channel_id": voice_channel_id,
+                        "chat_channel_id": chat_channel_id,
                         "url": uri,
                     },
                 )

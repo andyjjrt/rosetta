@@ -204,7 +204,7 @@ async def test_play_adapter_delegates_enqueue_options_and_keeps_success_embed() 
             player,
             PlayRequest(
                 user_id="30",
-                voice_channel_id="20",
+                chat_channel_id="40",
                 url="https://request.example/song",
                 loop="Queue",
                 shuffle=True,

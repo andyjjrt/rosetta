@@ -147,22 +147,23 @@ class MusicService:
         self, request: PlayRequest
     ) -> "ResolvedTarget | MusicFailure":
         user_id = int(request.user_id)
-        channel_id = int(request.voice_channel_id)
-        channel = self._bot.get_channel(channel_id)
-        if channel is None:
+        chat_channel_id = int(request.chat_channel_id)
+        chat_channel = self._bot.get_channel(chat_channel_id)
+        if chat_channel is None:
             try:
-                channel = await self._bot.fetch_channel(channel_id)
+                chat_channel = await self._bot.fetch_channel(chat_channel_id)
             except discord.NotFound:
                 return self._channel_not_found()
-        if channel is None:
+        if chat_channel is None:
             return self._channel_not_found()
-        if not isinstance(channel, discord.VoiceChannel):
+
+        guild = getattr(chat_channel, "guild", None)
+        if guild is None:
             return self._failure(
-                MusicErrorCode.NOT_VOICE_CHANNEL,
-                "Target channel is not a voice channel.",
+                MusicErrorCode.CHANNEL_NOT_FOUND,
+                "Chat channel is not associated with a guild.",
             )
 
-        guild = channel.guild
         member = guild.get_member(user_id)
         if member is None:
             try:
@@ -174,17 +175,18 @@ class MusicService:
                 )
         voice_state = member.voice
         member_channel = voice_state.channel if voice_state is not None else None
-        if member_channel is None or member_channel.id != channel.id:
+        if member_channel is None:
             return self._failure(
-                MusicErrorCode.USER_NOT_IN_CHANNEL, "User is not in the target channel."
+                MusicErrorCode.USER_NOT_IN_CHANNEL,
+                "User is not connected to a voice channel.",
             )
-        permissions = channel.permissions_for(guild.me)
+        permissions = member_channel.permissions_for(guild.me)
         if not permissions.connect or not permissions.speak:
             return self._failure(
                 MusicErrorCode.BOT_PERMISSION_DENIED,
                 "Bot lacks connect or speak permission.",
             )
-        return ResolvedTarget(guild=guild, channel=channel)
+        return ResolvedTarget(guild=guild, channel=member_channel)
 
     def _get_node(self, node_name: str | None) -> lava_lyra.Node | None:
         if not self._pool.nodes:
@@ -247,7 +249,7 @@ class MusicService:
     def _channel_not_found(self) -> MusicFailure:
         return self._failure(
             MusicErrorCode.CHANNEL_NOT_FOUND,
-            "Voice channel was not found.",
+            "Chat channel was not found.",
         )
 
     def _node_not_found(self) -> MusicFailure:

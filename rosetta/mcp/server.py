@@ -34,7 +34,7 @@ def create_mcp_server(
     @app.tool(name="play", structured_output=True)
     async def play(
         user_id: Annotated[str, StringConstraints(pattern=r"^[0-9]+$")],
-        voice_channel_id: Annotated[str, StringConstraints(pattern=r"^[0-9]+$")],
+        chat_channel_id: Annotated[str, StringConstraints(pattern=r"^[0-9]+$")],
         url: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)],
         loop: LoopModeName = LoopModeName.OFF,
         shuffle: bool = False,
@@ -43,7 +43,7 @@ def create_mcp_server(
     ) -> PlayResult:
         request = PlayRequest(
             user_id=user_id,
-            voice_channel_id=voice_channel_id,
+            chat_channel_id=chat_channel_id,
             url=url,
             loop=loop,
             shuffle=shuffle,

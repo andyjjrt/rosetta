@@ -102,9 +102,9 @@ async def test_list_tools_returns_exact_names_and_schemas() -> None:
                 "title": "User Id",
                 "type": "string",
             },
-            "voice_channel_id": {
+            "chat_channel_id": {
                 "pattern": "^[0-9]+$",
-                "title": "Voice Channel Id",
+                "title": "Chat Channel Id",
                 "type": "string",
             },
             "url": {"minLength": 1, "title": "Url", "type": "string"},
@@ -117,7 +117,7 @@ async def test_list_tools_returns_exact_names_and_schemas() -> None:
                 "title": "Node Name",
             },
         },
-        "required": ["user_id", "voice_channel_id", "url"],
+        "required": ["user_id", "chat_channel_id", "url"],
         "title": "playArguments",
         "type": "object",
     }
@@ -139,7 +139,7 @@ async def test_search_uri_feeds_play_with_structured_success() -> None:
     uri = search_payload["result"]["tracks"][0]["uri"]
     play_content, play_payload = await app.call_tool(
         "play",
-        {"user_id": "30", "voice_channel_id": "20", "url": uri},
+        {"user_id": "30", "chat_channel_id": "20", "url": uri},
     )
 
     assert search_payload == {
@@ -173,7 +173,7 @@ async def test_search_uri_feeds_play_with_structured_success() -> None:
     assert play_content[0].type == "text"
     assert music.search_calls == [("test", 10)]
     assert music.play_calls == [
-        PlayRequest(user_id="30", voice_channel_id="20", url=uri)
+        PlayRequest(user_id="30", chat_channel_id="20", url=uri)
     ]
 
 
@@ -193,7 +193,7 @@ async def test_structured_service_failures_stay_structured() -> None:
             "play",
             {
                 "user_id": "30",
-                "voice_channel_id": "20",
+                "chat_channel_id": "20",
                 "url": "https://example.test/watch?v=1",
             },
         )
@@ -218,7 +218,7 @@ async def test_structured_service_failures_stay_structured() -> None:
             "play",
             {
                 "user_id": 30,
-                "voice_channel_id": "20",
+                "chat_channel_id": "20",
                 "url": "https://example.test/watch?v=1",
             },
         ),
@@ -226,7 +226,7 @@ async def test_structured_service_failures_stay_structured() -> None:
             "play",
             {
                 "user_id": "30",
-                "voice_channel_id": "20",
+                "chat_channel_id": "20",
                 "url": "https://example.test/watch?v=1",
                 "loop": "All",
             },

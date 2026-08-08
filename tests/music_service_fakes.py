@@ -7,6 +7,7 @@ from rosetta.utils import music_service
 
 USER_ID = "123456789012345678"
 CHANNEL_ID = "987654321098765432"
+VOICE_CHANNEL_ID = "876543210987654321"
 URL = "u"
 
 
@@ -170,8 +171,10 @@ class FakeVoiceChannel:
         self.permissions = channel_permissions
         self.connect_calls = 0
         self.next_player: FakePlayer | None = None
+        self.permission_calls = 0
 
     def permissions_for(self, member: str) -> SimpleNamespace:
+        self.permission_calls += 1
         return self.permissions
 
     async def connect(self, *, cls: Callable[..., FakePlayer]) -> FakePlayer:
@@ -181,18 +184,28 @@ class FakeVoiceChannel:
         return self.next_player
 
 
+class FakeChatChannel:
+    def __init__(self, channel_id: int, guild: FakeGuild | None) -> None:
+        self.id = channel_id
+        self.guild = guild
+
+
 class FakeBot:
     def __init__(
         self,
-        channel: FakeVoiceChannel | str | None,
+        channel: FakeChatChannel | FakeVoiceChannel | str | None,
         fetch_error: discord.NotFound | None = None,
+        fetched_channel: FakeChatChannel | FakeVoiceChannel | str | None = None,
     ) -> None:
         self.channel = channel
         self.fetch_error = fetch_error
+        self.fetched_channel = fetched_channel
         self.get_calls = 0
         self.fetch_calls = 0
 
-    def get_channel(self, channel_id: int) -> FakeVoiceChannel | str | None:
+    def get_channel(
+        self, channel_id: int
+    ) -> FakeChatChannel | FakeVoiceChannel | str | None:
         self.get_calls += 1
         if isinstance(self.channel, str):
             return self.channel
@@ -202,10 +215,14 @@ class FakeBot:
             else None
         )
 
-    async def fetch_channel(self, channel_id: int) -> FakeVoiceChannel | str | None:
+    async def fetch_channel(
+        self, channel_id: int
+    ) -> FakeChatChannel | FakeVoiceChannel | str | None:
         self.fetch_calls += 1
         if self.fetch_error is not None:
             raise self.fetch_error
+        if self.fetched_channel is not None:
+            return self.fetched_channel
         return self.get_channel(channel_id)
 
 
@@ -229,10 +246,16 @@ def make_target(
     channel_permissions: SimpleNamespace | None = None,
 ) -> tuple["music_service.MusicService", FakePool, FakeNode, FakeVoiceChannel]:
     guild = FakeGuild(10)
-    channel = FakeVoiceChannel(
-        int(CHANNEL_ID), guild, channel_permissions or permissions()
+    chat_channel = FakeChatChannel(int(CHANNEL_ID), guild)
+    voice_channel = FakeVoiceChannel(
+        int(VOICE_CHANNEL_ID), guild, channel_permissions or permissions()
     )
-    guild.members[int(USER_ID)] = FakeMember(int(USER_ID), voice_state(channel))
+    guild.members[int(USER_ID)] = FakeMember(int(USER_ID), voice_state(voice_channel))
     node = FakeNode("MAIN", tracks)
     pool = FakePool([node])
-    return music_service.MusicService(FakeBot(channel), pool), pool, node, channel
+    return (
+        music_service.MusicService(FakeBot(chat_channel), pool),
+        pool,
+        node,
+        voice_channel,
+    )

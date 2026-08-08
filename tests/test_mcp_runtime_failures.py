@@ -271,7 +271,7 @@ async def test_streamable_http_asgi_flow_closes_without_sse_resource_warning() -
                     uri = result.structuredContent["result"]["tracks"][0]["uri"]
                     await session.call_tool(
                         "play",
-                        {"user_id": "1", "voice_channel_id": "2", "url": uri},
+                        {"user_id": "1", "chat_channel_id": "2", "url": uri},
                     )
 
     assert [tool.name for tool in tools.tools] == ["search", "play"]

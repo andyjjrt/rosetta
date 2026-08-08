@@ -53,8 +53,8 @@ async def test_search_maps_limits_and_backend_failures() -> None:
 
 
 def test_boundary_models_reject_non_ascii_snowflakes_and_bad_limits() -> None:
-    for field, value in (("user_id", "12x"), ("voice_channel_id", "١٢")):
-        payload = {"user_id": "123", "voice_channel_id": "456", "url": "https://track"}
+    for field, value in (("user_id", "12x"), ("chat_channel_id", "١٢")):
+        payload = {"user_id": "123", "chat_channel_id": "456", "url": "https://track"}
         payload[field] = value
         with pytest.raises(ValidationError):
             PlayRequest.model_validate(payload)
@@ -71,7 +71,7 @@ async def test_play_starts_valid_target_and_preserves_normalization() -> None:
     )
     channel.next_player = FakePlayer(node, channel, register=False)
     result = await service.play(
-        PlayRequest(user_id=USER_ID, voice_channel_id=CHANNEL_ID, url="https://song")
+        PlayRequest(user_id=USER_ID, chat_channel_id=CHANNEL_ID, url="https://song")
     )
     assert result.status == "success"
     assert result.playback_status == "started"
@@ -89,7 +89,7 @@ async def test_play_preserves_playlist_top_shuffle_loop_when_queueing() -> None:
     channel.next_player = player
     request = PlayRequest(
         user_id=USER_ID,
-        voice_channel_id=CHANNEL_ID,
+        chat_channel_id=CHANNEL_ID,
         url=URL,
         loop=LoopModeName.QUEUE,
         shuffle=True,
@@ -111,7 +111,7 @@ async def test_play_reuses_same_channel_and_conflicts_on_different_channel() -> 
     service, pool, node, channel = make_target([track("song", URL)])
     player = FakePlayer(node, channel)
     reused = await service.play(
-        PlayRequest(user_id=USER_ID, voice_channel_id=CHANNEL_ID, url=URL)
+        PlayRequest(user_id=USER_ID, chat_channel_id=CHANNEL_ID, url=URL)
     )
     assert reused.status == "success"
     assert (channel.connect_calls, player.lookup_queries) == (0, [URL])
@@ -120,7 +120,7 @@ async def test_play_reuses_same_channel_and_conflicts_on_different_channel() -> 
         node, FakeVoiceChannel(21, channel.guild, permissions())
     )
     conflict = await service.play(
-        PlayRequest(user_id=USER_ID, voice_channel_id=CHANNEL_ID, url=URL)
+        PlayRequest(user_id=USER_ID, chat_channel_id=CHANNEL_ID, url=URL)
     )
     assert conflict.status == "failure"
     assert conflict.code == "player_channel_conflict"
@@ -129,14 +129,14 @@ async def test_play_reuses_same_channel_and_conflicts_on_different_channel() -> 
 
 @pytest.mark.parametrize(
     ("channel", "expected"),
-    [(None, "channel_not_found"), ("text", "not_voice_channel")],
+    [(None, "channel_not_found"), ("text", "channel_not_found")],
 )
 async def test_play_rejects_missing_or_non_voice_channel_before_side_effects(
     channel: str | None, expected: str
 ) -> None:
     node = FakeNode("MAIN", [track("song", URL)])
     result = await MusicService(FakeBot(channel), FakePool([node])).play(
-        PlayRequest(user_id=USER_ID, voice_channel_id=CHANNEL_ID, url=URL)
+        PlayRequest(user_id=USER_ID, chat_channel_id=CHANNEL_ID, url=URL)
     )
     assert result.status == "failure"
     assert result.code == expected
@@ -147,7 +147,7 @@ async def test_play_returns_node_not_found_before_connect() -> None:
     service, _, _, channel = make_target([])
     result = await service.play(
         PlayRequest(
-            user_id=USER_ID, voice_channel_id=CHANNEL_ID, url=URL, node_name="missing"
+            user_id=USER_ID, chat_channel_id=CHANNEL_ID, url=URL, node_name="missing"
         )
     )
     assert result.status == "failure"
@@ -161,7 +161,7 @@ async def test_play_without_nodes_returns_backend_unavailable_before_target_reso
     bot = FakeBot(None)
     pool = FakePool([])
     result = await MusicService(bot, pool).play(
-        PlayRequest(user_id=USER_ID, voice_channel_id=CHANNEL_ID, url=URL)
+        PlayRequest(user_id=USER_ID, chat_channel_id=CHANNEL_ID, url=URL)
     )
     assert result.status == "failure"
     assert result.code == "music_backend_unavailable"
@@ -175,7 +175,7 @@ async def test_play_missing_explicit_node_returns_node_not_found_before_target_r
     pool = FakePool([FakeNode("MAIN", [])])
     result = await MusicService(bot, pool).play(
         PlayRequest(
-            user_id=USER_ID, voice_channel_id=CHANNEL_ID, url=URL, node_name="missing"
+            user_id=USER_ID, chat_channel_id=CHANNEL_ID, url=URL, node_name="missing"
         )
     )
     assert result.status == "failure"
@@ -189,7 +189,7 @@ async def test_play_maps_fetch_channel_not_found_before_side_effects() -> None:
     node = FakeNode("MAIN", [track("song", URL)])
     pool = FakePool([node])
     result = await MusicService(bot, pool).play(
-        PlayRequest(user_id=USER_ID, voice_channel_id=CHANNEL_ID, url=URL)
+        PlayRequest(user_id=USER_ID, chat_channel_id=CHANNEL_ID, url=URL)
     )
     assert result.status == "failure"
     assert result.code == "channel_not_found"
@@ -211,7 +211,7 @@ async def test_play_returns_lookup_failures_without_volume_filter_queue_or_play_
         service, _, node, channel = make_target(tracks)
         channel.next_player = FakePlayer(node, channel)
         result = await service.play(
-            PlayRequest(user_id=USER_ID, voice_channel_id=CHANNEL_ID, url="missing")
+            PlayRequest(user_id=USER_ID, chat_channel_id=CHANNEL_ID, url="missing")
         )
         assert result.status == "failure"
         assert result.code == expected

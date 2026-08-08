@@ -53,7 +53,7 @@ async def test_real_streamable_http_search_uri_play_contract() -> None:
                     uri = search.structuredContent["result"]["tracks"][0]["uri"]
                     play = await session.call_tool(
                         "play",
-                        {"user_id": "111", "voice_channel_id": "222", "url": uri},
+                        {"user_id": "111", "chat_channel_id": "222", "url": uri},
                     )
 
         # Then: the exposed surface is exactly search/play and decimal-string play works.
@@ -117,7 +117,7 @@ async def test_http_failure_contracts_and_readme_snippet_are_executable() -> Non
             "play",
             {
                 "user_id": "111",
-                "voice_channel_id": "333",
+                "chat_channel_id": "333",
                 "url": "https://youtube.example/watch?v=contract",
             },
         )
@@ -127,7 +127,7 @@ async def test_http_failure_contracts_and_readme_snippet_are_executable() -> Non
             "play",
             {
                 "user_id": "111",
-                "voice_channel_id": "222",
+                "chat_channel_id": "222",
                 "url": "https://youtube.example/watch?v=conflict",
             },
         )
@@ -135,7 +135,7 @@ async def test_http_failure_contracts_and_readme_snippet_are_executable() -> Non
             url,
             bearer_token,
             "play",
-            {"user_id": "not-decimal", "voice_channel_id": "222", "url": "x"},
+            {"user_id": "not-decimal", "chat_channel_id": "222", "url": "x"},
         )
         service.backend_available = False
         backend = await call_tool(url, bearer_token, "search", {"keyword": "contract"})

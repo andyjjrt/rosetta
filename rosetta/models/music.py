@@ -58,7 +58,7 @@ class SearchSuccess(MusicModel):
 
 class PlayRequest(MusicModel):
     user_id: SnowflakeString
-    voice_channel_id: SnowflakeString
+    chat_channel_id: SnowflakeString
     url: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
     loop: LoopModeName = LoopModeName.OFF
     shuffle: bool = False

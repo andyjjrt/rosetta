@@ -62,13 +62,11 @@ async def play_from_interaction(
             )
             player = await interaction.user.voice.channel.connect(cls=player_cls)
 
-    voice = interaction.user.voice
-    voice_channel = voice.channel if voice and voice.channel else player.channel
     result = await service.enqueue(
         player,
         PlayRequest(
             user_id=str(interaction.user.id),
-            voice_channel_id=str(voice_channel.id),
+            chat_channel_id=str(interaction.channel.id),
             url=request.url,
             loop=request.loop,
             shuffle=request.shuffle,

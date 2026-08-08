@@ -63,7 +63,7 @@ class DeterministicHttpMusicService:
                 code="music_backend_unavailable",
                 message="No Lavalink node is available.",
             )
-        if request.user_id != "111" or request.voice_channel_id != "222":
+        if request.user_id != "111" or request.chat_channel_id != "222":
             return MusicFailure(
                 code="user_not_in_channel",
                 message="User is not connected to the requested voice channel.",
