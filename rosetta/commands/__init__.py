@@ -4,7 +4,7 @@ from .basics import Basics
 from .llm import LLM
 from .music import Music
 from .mygo import Mygo
-from .settings import Setting
+from .setting import Setting
 
 try:
     from .nanobot import Nanobot

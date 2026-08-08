@@ -8,7 +8,7 @@ from typing import TypeVar
 import discord
 import pytest
 
-from rosetta.commands.settings import Setting
+from rosetta.commands.setting import Setting
 from rosetta.utils.llm_model_access import LlmModelAccessRepository
 from rosetta.utils.mcp_api_keys import McpApiKeyRepository
 

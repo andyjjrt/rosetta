@@ -87,7 +87,7 @@ class RosettaBot(commands.Bot):
             from .commands.basics import Basics
 
             await self.add_cog(Basics(self))
-        from .commands.settings import Setting
+        from .commands.setting import Setting
 
         await self.add_cog(
             Setting(
