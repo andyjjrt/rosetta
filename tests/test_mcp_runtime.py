@@ -14,6 +14,7 @@ import httpx
 import pytest
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
+from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse, Response
@@ -206,9 +207,17 @@ async def test_sdk_lifespan_enters_and_exits_once() -> None:
     manager = CountingSessionManager()
 
     def factory(
-        _music: DeterministicMusicService, *, streamable_http_path: str
+        _music: DeterministicMusicService,
+        *,
+        streamable_http_path: str,
+        transport_security: TransportSecuritySettings,
     ) -> FakeMCPServer:
         assert streamable_http_path == "/"
+        assert transport_security == TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=["127.0.0.1:*"],
+            allowed_origins=["http://127.0.0.1:*"],
+        )
         return FakeMCPServer(manager)
 
     runtime = MCPRuntime(

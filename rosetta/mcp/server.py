@@ -1,6 +1,7 @@
 from typing import Annotated, Protocol
 
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import Field, StringConstraints
 
 from rosetta.models.music import LoopModeName, PlayRequest, PlayResult, SearchResult
@@ -13,7 +14,10 @@ class McpMusicService(Protocol):
 
 
 def create_mcp_server(
-    music: McpMusicService, *, streamable_http_path: str = "/mcp"
+    music: McpMusicService,
+    *,
+    streamable_http_path: str = "/mcp",
+    transport_security: TransportSecuritySettings | None = None,
 ) -> FastMCP:
     # Rosetta tools are request/response only; stateless JSON avoids mcp 1.28.1
     # stateful SSE MemoryObjectReceiveStream leaks on normal streamable HTTP close.
@@ -22,6 +26,7 @@ def create_mcp_server(
         streamable_http_path=streamable_http_path,
         stateless_http=True,
         json_response=True,
+        transport_security=transport_security,
     )
 
     @app.tool(name="search", structured_output=True)

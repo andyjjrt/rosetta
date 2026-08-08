@@ -13,6 +13,7 @@ import pytest
 import uvicorn
 from mcp import ClientSession
 from mcp.client.streamable_http import streamable_http_client
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import SecretStr
 from starlette.applications import Starlette
 from starlette.routing import Mount
@@ -275,3 +276,163 @@ async def test_streamable_http_asgi_flow_closes_without_sse_resource_warning() -
                     )
 
     assert [tool.name for tool in tools.tools] == ["search", "play"]
+
+
+async def test_streamable_http_asgi_flow_accepts_configured_host() -> None:
+    mcp = create_mcp_server(
+        DeterministicMusicService(),
+        streamable_http_path="/",
+        transport_security=TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=["host.docker.internal:*"],
+        ),
+    )
+    inner = mcp.streamable_http_app()
+
+    @asynccontextmanager
+    async def lifespan(_app: Starlette) -> AsyncIterator[None]:
+        async with mcp.session_manager.run():
+            yield
+
+    app = Starlette(routes=[Mount("/mcp", app=inner)], lifespan=lifespan)
+    async with mcp.session_manager.run():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://host.docker.internal:8000",
+            headers={"Host": "host.docker.internal:8000"},
+        ) as client:
+            async with streamable_http_client(
+                "http://host.docker.internal:8000/mcp/",
+                http_client=client,
+            ) as (read_stream, write_stream, _session_id):
+                async with ClientSession(read_stream, write_stream) as session:
+                    await session.initialize()
+                    tools = await session.list_tools()
+
+    assert [tool.name for tool in tools.tools] == ["search", "play"]
+
+
+async def test_streamable_http_asgi_flow_rejects_unlisted_host_with_sdk_status() -> (
+    None
+):
+    """FastMCP transport security reports an unlisted Host header as 421."""
+    mcp = create_mcp_server(
+        DeterministicMusicService(),
+        streamable_http_path="/",
+        transport_security=TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=["host.docker.internal:*"],
+        ),
+    )
+    inner = mcp.streamable_http_app()
+
+    @asynccontextmanager
+    async def lifespan(_app: Starlette) -> AsyncIterator[None]:
+        async with mcp.session_manager.run():
+            yield
+
+    app = Starlette(routes=[Mount("/mcp", app=inner)], lifespan=lifespan)
+    async with mcp.session_manager.run():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://evil.example:8000",
+            headers={"Host": "evil.example:8000"},
+        ) as client:
+            response = await client.post(
+                "/mcp/",
+                headers={"Content-Type": "application/json"},
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {},
+                },
+            )
+
+    assert response.status_code == 421
+
+
+async def test_streamable_http_asgi_flow_accepts_configured_origin() -> None:
+    mcp = create_mcp_server(
+        DeterministicMusicService(),
+        streamable_http_path="/",
+        transport_security=TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=["host.docker.internal:*"],
+            allowed_origins=["http://host.docker.internal:*"],
+        ),
+    )
+    inner = mcp.streamable_http_app()
+
+    @asynccontextmanager
+    async def lifespan(_app: Starlette) -> AsyncIterator[None]:
+        async with mcp.session_manager.run():
+            yield
+
+    app = Starlette(routes=[Mount("/mcp", app=inner)], lifespan=lifespan)
+    async with mcp.session_manager.run():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://host.docker.internal:8000",
+            headers={
+                "Host": "host.docker.internal:8000",
+                "Origin": "http://host.docker.internal:8000",
+            },
+        ) as client:
+            async with streamable_http_client(
+                "http://host.docker.internal:8000/mcp/",
+                http_client=client,
+            ) as (read_stream, write_stream, _session_id):
+                async with ClientSession(read_stream, write_stream) as session:
+                    await session.initialize()
+                    tools = await session.list_tools()
+
+    assert [tool.name for tool in tools.tools] == ["search", "play"]
+
+
+async def test_streamable_http_asgi_flow_rejects_unlisted_origin_with_sdk_status() -> (
+    None
+):
+    """FastMCP transport security reports an unlisted Origin header as 403."""
+    mcp = create_mcp_server(
+        DeterministicMusicService(),
+        streamable_http_path="/",
+        transport_security=TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=["host.docker.internal:*"],
+            allowed_origins=["http://host.docker.internal:*"],
+        ),
+    )
+    inner = mcp.streamable_http_app()
+
+    @asynccontextmanager
+    async def lifespan(_app: Starlette) -> AsyncIterator[None]:
+        async with mcp.session_manager.run():
+            yield
+
+    app = Starlette(routes=[Mount("/mcp", app=inner)], lifespan=lifespan)
+    async with mcp.session_manager.run():
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(
+            transport=transport,
+            base_url="http://host.docker.internal:8000",
+            headers={
+                "Host": "host.docker.internal:8000",
+                "Origin": "http://evil.example:8000",
+            },
+        ) as client:
+            response = await client.post(
+                "/mcp/",
+                headers={"Content-Type": "application/json"},
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {},
+                },
+            )
+
+    assert response.status_code == 403

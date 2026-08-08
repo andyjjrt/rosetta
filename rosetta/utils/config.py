@@ -163,6 +163,12 @@ class McpSetting(BaseSettings):
         if not self.ALLOWED_HOSTS:
             raise ValueError("MCP_ALLOWED_HOSTS must contain at least one host")
 
+        if any("*" in host for host in self.ALLOWED_HOSTS):
+            raise ValueError(
+                "MCP_ALLOWED_HOSTS must contain exact hostname or IP entries; "
+                "the MCP SDK does not support wildcard host patterns"
+            )
+
 
 BotConfig = BotSetting()
 EmojiConfig = EmojiSetting()

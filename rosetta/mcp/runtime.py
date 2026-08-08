@@ -7,6 +7,7 @@ from typing import Protocol
 
 import anyio
 import uvicorn
+from mcp.server.transport_security import TransportSecuritySettings
 from starlette.applications import Starlette
 from starlette.routing import Mount
 from starlette.types import ASGIApp
@@ -41,7 +42,11 @@ class StreamableMCPServer(Protocol):
 
 class McpServerFactory(Protocol):
     def __call__(
-        self, music: McpMusicService, *, streamable_http_path: str
+        self,
+        music: McpMusicService,
+        *,
+        streamable_http_path: str,
+        transport_security: TransportSecuritySettings,
     ) -> StreamableMCPServer: ...
 
 
@@ -152,7 +157,18 @@ class MCPRuntime:
         return sock
 
     def _asgi_app(self) -> ASGIApp:
-        mcp = self._server_factory(self._music, streamable_http_path="/")
+        transport_security = TransportSecuritySettings(
+            enable_dns_rebinding_protection=True,
+            allowed_hosts=[f"{host}:*" for host in self._settings.ALLOWED_HOSTS],
+            allowed_origins=[
+                f"http://{host}:*" for host in self._settings.ALLOWED_HOSTS
+            ],
+        )
+        mcp = self._server_factory(
+            self._music,
+            streamable_http_path="/",
+            transport_security=transport_security,
+        )
         streamable_app = mcp.streamable_http_app()
 
         @asynccontextmanager

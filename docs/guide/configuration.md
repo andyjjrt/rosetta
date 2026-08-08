@@ -69,7 +69,25 @@ Nanobot's Rosetta tools require the private MCP endpoint:
 | `MCP_PORT` | MCP listener port | `8000` |
 | `MCP_PATH` | Streamable HTTP mount path | `/mcp` |
 | `SETTING_DATABASE_PATH` | Managed settings SQLite database path for MCP API keys | `.data/settings.sqlite3` |
-| `MCP_ALLOWED_HOSTS` | Accepted HTTP Host values as a quoted JSON list | `["127.0.0.1","localhost"]` |
+| `MCP_ALLOWED_HOSTS` | Accepted HTTP Host values as a quoted JSON list. Values must be exact hostname or IP entries—without a protocol or port. Wildcards such as `*` and `*.example.com` are unsupported because the MCP SDK cannot safely represent them. Rosetta's HTTP Host middleware and the MCP SDK both enforce this list; the SDK expands each entry to match any port. | `["127.0.0.1","localhost"]` |
+
+### Docker container-to-host access
+
+For an MCP client running in a Docker container and Rosetta running on the host, use
+`http://host.docker.internal:8000/mcp/` and include `host.docker.internal` in the
+allowed hosts:
+
+```bash
+MCP_HOST=0.0.0.0
+MCP_PORT=8000
+MCP_ALLOWED_HOSTS='["127.0.0.1","localhost","host.docker.internal"]'
+```
+
+The MCP listener must be reachable from the container; binding only to the host's
+loopback address (`127.0.0.1`) is not sufficient.
+
+Native Linux Docker Engine does not create `host.docker.internal` automatically;
+add the Compose equivalent `extra_hosts: ["host.docker.internal:host-gateway"]`.
 
 ## Example `.env` File
 

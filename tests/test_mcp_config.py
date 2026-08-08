@@ -128,6 +128,14 @@ def test_enabled_mcp_without_bearer_still_validates_startup_configuration(
             },
             "ALLOWED_HOSTS",
         ),
+        (
+            {
+                "MCP_ENABLED": "true",
+                "MCP_BEARER_TOKEN": "a" * 32,
+                "MCP_ALLOWED_HOSTS": '["*.example.com"]',
+            },
+            "MCP SDK does not support wildcard host patterns",
+        ),
     ],
 )
 def test_startup_validation_rejects_invalid_configuration(
